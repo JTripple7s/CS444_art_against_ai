@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Art Against AI</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="logo">Art Against AI</div>
+        <ul class="nav-links">
+            <li><a href="#" data-view="home">Home</a></li>
+            <li><a href="#" data-view="upload">Upload</a></li>
+            <li><a href="#" data-view="profile">Profile</a></li>
+        </ul>
+        <div class="user-info">
+            <span id="currentUserName">@DesignStudent</span>
+        </div>
+    </nav>
+
+    <main>
+        <!-- HOME FEED -->
+        <section id="view-home" class="view active">
+
+    <!-- Logo Area -->
+            <div class="home-logo-container">
+                <img src="mascot.png" alt="Art Against AI Logo" class="home-logo">
+            </div>
+
+                <h2>Recent Artwork</h2>
+            <div id="feedGrid" class="grid"></div>
+        </section>
+
+        <!-- UPLOAD PAGE -->
+        <section id="view-upload" class="view">
+            <h2>Upload Artwork</h2>
+            <form id="uploadForm">
+                <label>
+                    Title
+                    <input type="text" id="artTitle" required>
+                </label>
+                <label>
+                    Image URL
+                    <input type="url" id="artImageUrl" placeholder="https://..." required>
+                </label>
+                <label>
+                    Description / Story
+                    <textarea id="artDescription" rows="4" required></textarea>
+                </label>
+                <button type="submit">Upload</button>
+            </form>
+        </section>
+
+        <!-- ARTWORK DETAIL PAGE -->
+        <section id="view-detail" class="view">
+            <button class="back-btn" data-view="home">← Back to Feed</button>
+            <div id="detailContainer" class="detail-container">
+                <!-- Filled by JS -->
+            </div>
+        </section>
+
+        <!-- PROFILE PAGE -->
+        <section id="view-profile" class="view">
+            <h2>Your Profile</h2>
+            <div class="profile-header">
+                <div class="avatar">DS</div>
+                <div>
+                    <h3>@DesignStudent</h3>
+                    <p>Art student & creative enthusiast. Sharing human-made art.</p>
+                    <p><strong>Total Upvotes:</strong> <span id="profileTotalUpvotes">0</span></p>
+                </div>
+            </div>
+            <h3>Your Artwork</h3>
+            <div id="profileGrid" class="grid"></div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>

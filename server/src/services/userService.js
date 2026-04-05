@@ -1,0 +1,35 @@
+const { getDB } = require("../config/db");
+
+async function getUserByEmail(email) {
+  const db = getDB();
+  return db.get(`
+    SELECT id, username, email, password_hash, created_at
+    FROM users
+    WHERE email = ?
+  `, [email]);
+}
+
+async function getUserById(id) {
+  const db = getDB();
+  return db.get(`
+    SELECT id, username, email, created_at
+    FROM users
+    WHERE id = ?
+  `, [id]);
+}
+
+async function createUser({ username, email, passwordHash }) {
+  const db = getDB();
+  const result = await db.run(`
+    INSERT INTO users (username, email, password_hash)
+    VALUES (?, ?, ?)
+  `, [username, email, passwordHash]);
+
+  return getUserById(result.lastID);
+}
+
+module.exports = {
+  getUserByEmail,
+  getUserById,
+  createUser,
+};

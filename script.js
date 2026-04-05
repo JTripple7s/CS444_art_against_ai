@@ -1,11 +1,106 @@
-// Mock "current user"
-const CURRENT_USER = {
-    username: "@DesignStudent",
-    displayName: "Design Student"
-};
+// API Configuration
+const API_URL = "http://localhost:5000/api";
+
+// Auth State
+let currentUser = null;
 
 // LocalStorage keys
+const LS_KEY_TOKEN = "artAgainstAI_token";
 const LS_KEY_ARTWORKS = "artAgainstAI_artworks";
+
+// ---------- Auth Helpers ----------
+
+async function fetchCurrentUser() {
+    const token = localStorage.getItem(LS_KEY_TOKEN);
+    if (!token) {
+        updateAuthUI(null);
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/auth/me`, {
+            headers: {
+                "Authorization": `Bearer ${token}`
+            }
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            updateAuthUI(data.user);
+        } else {
+            // Token might be invalid or expired
+            localStorage.removeItem(LS_KEY_TOKEN);
+            updateAuthUI(null);
+        }
+    } catch (error) {
+        console.error("Error fetching user:", error);
+        updateAuthUI(null);
+    }
+}
+
+function updateAuthUI(user) {
+    currentUser = user;
+    if (user) {
+        document.body.classList.add("logged-in");
+        document.getElementById("currentUserName").textContent = `@${user.username}`;
+    } else {
+        document.body.classList.remove("logged-in");
+        document.getElementById("currentUserName").textContent = "";
+    }
+}
+
+async function login(email, password) {
+    try {
+        const response = await fetch(`${API_URL}/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password })
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+            localStorage.setItem(LS_KEY_TOKEN, data.token);
+            updateAuthUI(data.user);
+            showView("home");
+            renderFeed();
+        } else {
+            alert(data.message || "Login failed");
+        }
+    } catch (error) {
+        console.error("Login error:", error);
+        alert("An error occurred during login.");
+    }
+}
+
+async function signup(username, email, password) {
+    try {
+        const response = await fetch(`${API_URL}/auth/signup`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, email, password })
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+            localStorage.setItem(LS_KEY_TOKEN, data.token);
+            updateAuthUI(data.user);
+            showView("home");
+            renderFeed();
+        } else {
+            alert(data.message || "Signup failed");
+        }
+    } catch (error) {
+        console.error("Signup error:", error);
+        alert(`An error occurred during signup: ${error.message}`);
+    }
+}
+
+function logout() {
+    localStorage.removeItem(LS_KEY_TOKEN);
+    updateAuthUI(null);
+    showView("home");
+    renderFeed();
+}
 
 // ---------- Data Helpers ----------
 
@@ -17,7 +112,7 @@ function loadArtworks() {
                 id: "1",
                 title: "Sunset Dreams",
                 artist: "Alex Rivera",
-                owner: CURRENT_USER.username,
+                owner: "alex_rivera",
                 imageUrl: "https://via.placeholder.com/600x400?text=Sunset+Dreams",
                 description: "A warm, hand-painted sunset inspired by late studio nights.",
                 votes: 3,
@@ -29,7 +124,7 @@ function loadArtworks() {
                 id: "2",
                 title: "Paper Sculpture",
                 artist: "Jamie Lee",
-                owner: CURRENT_USER.username,
+                owner: "jamie_lee",
                 imageUrl: "https://via.placeholder.com/600x400?text=Paper+Sculpture",
                 description: "Layered paper sculpture exploring texture and shadow.",
                 votes: 5,
@@ -55,11 +150,12 @@ function getArtworkById(id) {
 
 function showView(viewId) {
     document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
-    document.getElementById("view-" + viewId).classList.add("active");
+    const targetView = document.getElementById("view-" + viewId);
+    if (targetView) targetView.classList.add("active");
 }
 
 function setupNav() {
-    document.querySelectorAll(".nav-links a, .back-btn").forEach(link => {
+    document.querySelectorAll("[data-view]").forEach(link => {
         link.addEventListener("click", (e) => {
             e.preventDefault();
             const view = link.getAttribute("data-view");
@@ -70,12 +166,18 @@ function setupNav() {
             }
         });
     });
+
+    document.getElementById("logoutBtn").addEventListener("click", (e) => {
+        e.preventDefault();
+        logout();
+    });
 }
 
 // ---------- Feed Rendering ----------
 
 function renderFeed() {
     const grid = document.getElementById("feedGrid");
+    if (!grid) return;
     grid.innerHTML = "";
     const artworks = loadArtworks().sort((a, b) => b.votes - a.votes);
 
@@ -94,7 +196,6 @@ function renderFeed() {
         `;
 
         card.addEventListener("click", (e) => {
-            // Avoid triggering detail when clicking upvote
             if (e.target.classList.contains("upvote-btn")) return;
             openDetail(art.id);
         });
@@ -111,10 +212,16 @@ function renderFeed() {
 
 // ---------- Upload Handling ----------
 
-function setupUploadForm() {
-    const form = document.getElementById("uploadForm");
-    form.addEventListener("submit", (e) => {
+function setupForms() {
+    const uploadForm = document.getElementById("uploadForm");
+    uploadForm.addEventListener("submit", (e) => {
         e.preventDefault();
+        if (!currentUser) {
+            alert("You must be logged in to upload.");
+            showView("login");
+            return;
+        }
+
         const title = document.getElementById("artTitle").value.trim();
         const imageUrl = document.getElementById("artImageUrl").value.trim();
         const description = document.getElementById("artDescription").value.trim();
@@ -125,8 +232,8 @@ function setupUploadForm() {
         const newArt = {
             id: Date.now().toString(),
             title,
-            artist: CURRENT_USER.displayName,
-            owner: CURRENT_USER.username,
+            artist: currentUser.username,
+            owner: currentUser.username,
             imageUrl,
             description,
             votes: 0,
@@ -135,9 +242,26 @@ function setupUploadForm() {
         artworks.push(newArt);
         saveArtworks(artworks);
 
-        form.reset();
+        uploadForm.reset();
         renderFeed();
         showView("home");
+    });
+
+    const loginForm = document.getElementById("loginForm");
+    loginForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const email = document.getElementById("loginEmail").value.trim();
+        const password = document.getElementById("loginPassword").value;
+        login(email, password);
+    });
+
+    const signupForm = document.getElementById("signupForm");
+    signupForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const username = document.getElementById("signupUsername").value.trim();
+        const email = document.getElementById("signupEmail").value.trim();
+        const password = document.getElementById("signupPassword").value;
+        signup(username, email, password);
     });
 }
 
@@ -151,7 +275,7 @@ function upvoteArtwork(id) {
     saveArtworks(artworks);
     renderFeed();
     const currentView = document.querySelector("#view-detail.view.active");
-    if (currentView) openDetail(id); // refresh detail if open
+    if (currentView) openDetail(id);
     renderProfile();
 }
 
@@ -188,7 +312,6 @@ function openDetail(id) {
         </div>
     `;
 
-    // Render comments
     const commentsList = container.querySelector("#commentsList");
     commentsList.innerHTML = "";
     art.comments.forEach(c => {
@@ -198,15 +321,19 @@ function openDetail(id) {
         commentsList.appendChild(div);
     });
 
-    // Upvote button
     container.querySelector("#detailUpvoteBtn").addEventListener("click", () => {
         upvoteArtwork(art.id);
     });
 
-    // Comment form
     const commentForm = container.querySelector("#commentForm");
     commentForm.addEventListener("submit", (e) => {
         e.preventDefault();
+        if (!currentUser) {
+            alert("You must be logged in to comment.");
+            showView("login");
+            return;
+        }
+
         const text = container.querySelector("#commentText").value.trim();
         if (!text) return;
 
@@ -214,11 +341,11 @@ function openDetail(id) {
         const target = artworks.find(a => a.id === art.id);
         if (!target) return;
         target.comments.push({
-            author: CURRENT_USER.username,
+            author: `@${currentUser.username}`,
             text
         });
         saveArtworks(artworks);
-        openDetail(art.id); // re-render
+        openDetail(art.id);
     });
 
     showView("detail");
@@ -227,11 +354,15 @@ function openDetail(id) {
 // ---------- Profile Page ----------
 
 function renderProfile() {
+    if (!currentUser) return;
+
     const grid = document.getElementById("profileGrid");
     const totalUpvotesEl = document.getElementById("profileTotalUpvotes");
+    if (!grid || !totalUpvotesEl) return;
+
     grid.innerHTML = "";
 
-    const artworks = loadArtworks().filter(a => a.owner === CURRENT_USER.username);
+    const artworks = loadArtworks().filter(a => a.owner === currentUser.username);
     let totalVotes = 0;
 
     artworks.forEach(art => {
@@ -248,14 +379,20 @@ function renderProfile() {
     });
 
     totalUpvotesEl.textContent = totalVotes;
+    
+    // Update profile header
+    const profileHeader = document.querySelector("#view-profile .profile-header");
+    if (profileHeader) {
+        profileHeader.querySelector(".avatar").textContent = currentUser.username.substring(0, 2).toUpperCase();
+        profileHeader.querySelector("h3").textContent = `@${currentUser.username}`;
+    }
 }
 
 // ---------- Init ----------
 
 document.addEventListener("DOMContentLoaded", () => {
-    document.getElementById("currentUserName").textContent = CURRENT_USER.username;
+    fetchCurrentUser();
     setupNav();
-    setupUploadForm();
+    setupForms();
     renderFeed();
-    renderProfile();
 });

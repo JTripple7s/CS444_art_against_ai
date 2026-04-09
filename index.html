@@ -6,33 +6,72 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Navigation Bar -->
+    <!-- Navigation bar -->
     <nav class="navbar">
         <div class="logo">Art Against AI</div>
         <ul class="nav-links">
             <li><a href="#" data-view="home">Home</a></li>
-            <li><a href="#" data-view="upload">Upload</a></li>
-            <li><a href="#" data-view="profile">Profile</a></li>
+            <li class="auth-only"><a href="#" data-view="upload">Upload</a></li>
+            <li class="auth-only"><a href="#" data-view="profile">Profile</a></li>
+            <li class="guest-only"><a href="#" data-view="login">Login</a></li>
+            <li class="guest-only"><a href="#" data-view="signup">Sign Up</a></li>
+            <li class="auth-only"><a href="#" id="logoutBtn">Logout</a></li>
         </ul>
-        <div class="user-info">
-            <span id="currentUserName">@DesignStudent</span>
+        <div class="user-info auth-only">
+            <span id="currentUserName"></span>
         </div>
     </nav>
 
     <main>
-        <!-- HOME FEED -->
+        <!-- Home feed -->
         <section id="view-home" class="view active">
-
-    <!-- Logo Area -->
+            <!-- Logo Area -->
             <div class="home-logo-container">
                 <img src="mascot.png" alt="Art Against AI Logo" class="home-logo">
             </div>
-
-                <h2>Recent Artwork</h2>
+            <h2>Recent Artwork</h2>
             <div id="feedGrid" class="grid"></div>
         </section>
 
-        <!-- UPLOAD PAGE -->
+        <!-- Login page -->
+        <section id="view-login" class="view">
+            <h2>Login</h2>
+            <form id="loginForm">
+                <label>
+                    Email
+                    <input type="email" id="loginEmail" required>
+                </label>
+                <label>
+                    Password
+                    <input type="password" id="loginPassword" required>
+                </label>
+                <button type="submit">Login</button>
+            </form>
+            <p>Don't have an account? <a href="#" data-view="signup">Sign up here</a></p>
+        </section>
+
+        <!-- Signup page -->
+        <section id="view-signup" class="view">
+            <h2>Create Account</h2>
+            <form id="signupForm">
+                <label>
+                    Username
+                    <input type="text" id="signupUsername" required minlength="3">
+                </label>
+                <label>
+                    Email
+                    <input type="email" id="signupEmail" required>
+                </label>
+                <label>
+                    Password
+                    <input type="password" id="signupPassword" required minlength="6">
+                </label>
+                <button type="submit">Create Account</button>
+            </form>
+            <p>Already have an account? <a href="#" data-view="login">Login here</a></p>
+        </section>
+
+        <!-- upload page (temp) -->
         <section id="view-upload" class="view">
             <h2>Upload Artwork</h2>
             <form id="uploadForm">
@@ -52,15 +91,14 @@
             </form>
         </section>
 
-        <!-- ARTWORK DETAIL PAGE -->
+        <!-- detail page -->
         <section id="view-detail" class="view">
             <button class="back-btn" data-view="home">← Back to Feed</button>
             <div id="detailContainer" class="detail-container">
-                <!-- Filled by JS -->
             </div>
         </section>
 
-        <!-- PROFILE PAGE -->
+        <!-- Profile page -->
         <section id="view-profile" class="view">
             <h2>Your Profile</h2>
             <div class="profile-header">

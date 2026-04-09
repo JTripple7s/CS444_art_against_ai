@@ -130,7 +130,40 @@ main {
     color: #444;
 }
 
-/* Upload Form */
+/* Authentication visibility */
+.auth-only {
+    display: none !important;
+}
+
+.guest-only {
+    display: block !important;
+}
+
+body.logged-in .auth-only {
+    display: block !important;
+}
+
+body.logged-in .guest-only {
+    display: none !important;
+}
+
+li.auth-only, li.guest-only {
+    display: list-item !important;
+}
+
+body.logged-in li.auth-only {
+    display: list-item !important;
+}
+
+body.logged-in li.guest-only {
+    display: none !important;
+}
+
+body:not(.logged-in) li.auth-only {
+    display: none !important;
+}
+
+/* Upload & Auth Forms */
 form label {
     display: block;
     margin-bottom: 12px;
@@ -138,6 +171,8 @@ form label {
 }
 
 input[type="text"],
+input[type="email"],
+input[type="password"],
 input[type="url"],
 textarea {
     width: 100%;
@@ -146,6 +181,19 @@ textarea {
     border-radius: 6px;
     border: 1px solid #ccc;
     font-family: inherit;
+}
+
+.view h2 {
+    margin-bottom: 20px;
+}
+
+#view-login, #view-signup {
+    max-width: 400px;
+    margin: 40px auto;
+    padding: 25px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
 }
 
 button[type="submit"] {

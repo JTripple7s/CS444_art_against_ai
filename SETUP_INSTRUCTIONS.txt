@@ -1,0 +1,50 @@
+# Project Setup Instructions: CS444_art_against_ai
+
+Follow these steps to get the project running on a new device after pulling from GitHub.
+
+## 1. Install Dependencies
+The project has separate dependencies for the root and the server. Install both:
+
+### Root Dependencies:
+Open your terminal in the 'CS444_art_against_ai' folder and run:
+npm install
+
+### Server Dependencies:
+Navigate to the 'server' folder and run:
+cd server
+npm install
+
+---
+
+## 2. Configure Environment Variables
+The '.env' file is ignored by Git for security. You must manually recreate it:
+1. In the 'server/' directory, create a new file named '.env'.
+2. Add the following configuration (adjust values as needed):
+
+PORT=5000
+JWT_SECRET=your_random_secret_string_here
+CLIENT_URL=http://localhost:3000
+
+---
+
+## 3. Database Initialization
+The server is configured to automatically create the 'AAA.db' file in 'server/src/database/' if it does not exist. 
+
+NOTE: Because the database file is not tracked by Git, your local user accounts will NOT transfer to the new device. You will need to sign up again on the new machine to create a new admin/user account.
+
+---
+
+## 4. Frontend Data (LocalStorage)
+Artwork data (titles, images, votes) is stored in the browser's 'localStorage'. 
+- This data is specific to the browser and device you are using.
+- On a new device, the feed will reset to the default "seed" data until you upload new artwork.
+
+---
+
+## 5. Running the Application
+To start the backend server:
+1. Navigate to the 'server' directory.
+2. Run the start command:
+npm run dev
+
+The server will be active at http://localhost:5000. You can then open 'index.html' in your browser to use the application.

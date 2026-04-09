@@ -4,7 +4,6 @@ const authRoutes = require("./routes/authRoutes");
 
 const app = express();
 
-// Allow all origins for development to avoid CORS issues
 app.use(cors());
 
 app.use(express.json());

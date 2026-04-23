@@ -7,6 +7,11 @@ let currentUser = null;
 // LocalStorage keys
 const LS_KEY_TOKEN = "artAgainstAI_token";
 const LS_KEY_ARTWORKS = "artAgainstAI_artworks";
+const LS_KEY_UPVOTED = "artAgainstAI_upvoted";
+
+let feedPage = 1;
+const FEED_PAGE_SIZE = 10;
+let isLoadingMore = false;
 
 // ---------- Auth Helpers ----------
 
@@ -161,7 +166,7 @@ function setupNav() {
             const view = link.getAttribute("data-view");
             if (view) {
                 showView(view);
-                if (view === "home") renderFeed();
+                if (view === "home") renderFeed(true);
                 if (view === "profile") renderProfile();
             }
         });
@@ -175,13 +180,31 @@ function setupNav() {
 
 // ---------- Feed Rendering ----------
 
-function renderFeed() {
+const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            entry.target.classList.add("visible");
+        }
+    });
+}, { threshold: 0.2 });
+
+function renderFeed(reset = false) {
     const grid = document.getElementById("feedGrid");
     if (!grid) return;
-    grid.innerHTML = "";
-    const artworks = loadArtworks().sort((a, b) => b.votes - a.votes);
 
-    artworks.forEach(art => {
+    if (reset) {
+        grid.innerHTML = "";
+        feedPage = 1;
+    }
+
+    const artworks = loadArtworks()
+        .sort((a, b) => b.votes - a.votes);
+
+    const start = (feedPage - 1) * FEED_PAGE_SIZE;
+    const end = start + FEED_PAGE_SIZE;
+    const pageItems = artworks.slice(start, end);
+
+    pageItems.forEach(art => {
         const card = document.createElement("div");
         card.className = "card";
 
@@ -189,9 +212,9 @@ function renderFeed() {
             <img src="${art.imageUrl}" alt="${art.title}">
             <h3>${art.title}</h3>
             <p class="artist">by ${art.artist}</p>
-            <div class="card-footer">
+            <div class="detail-upvote-row">
                 <button class="upvote-btn">▲ Upvote</button>
-                <p class="votes">${art.votes} votes</p>
+                <span class="votes">${art.votes} votes</span>
             </div>
         `;
 
@@ -204,46 +227,64 @@ function renderFeed() {
         upvoteBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             upvoteArtwork(art.id);
+
+            upvoteBtn.classList.add("clicked");
+            setTimeout(() => upvoteBtn.classList.remove("clicked"), 300);
         });
 
+        const upvoted = loadUpvoted();
+        if (upvoted.includes(art.id)) {
+            upvoteBtn.classList.add("disabled");
+            upvoteBtn.textContent = "Upvoted";
+        }
         grid.appendChild(card);
+
+        observer.observe(card);
     });
+
+    feedPage++;
+    isLoadingMore = false;
 }
 
 // ---------- Upload Handling ----------
 
 function setupForms() {
-    const uploadForm = document.getElementById("uploadForm");
     uploadForm.addEventListener("submit", (e) => {
-        e.preventDefault();
+    e.preventDefault();
         if (!currentUser) {
             alert("You must be logged in to upload.");
             showView("login");
             return;
         }
 
-        const title = document.getElementById("artTitle").value.trim();
-        const imageUrl = document.getElementById("artImageUrl").value.trim();
-        const description = document.getElementById("artDescription").value.trim();
+    const title = document.getElementById("artTitle").value.trim();
+    const description = document.getElementById("artDescription").value.trim();
+    const fileInput = document.getElementById("artImageFile");
+    const file = fileInput.files[0];
 
-        if (!title || !imageUrl || !description) return;
+    if (!title || !description || !file) return;
 
-        const artworks = loadArtworks();
-        const newArt = {
-            id: Date.now().toString(),
-            title,
-            artist: currentUser.username,
-            owner: currentUser.username,
-            imageUrl,
-            description,
-            votes: 0,
-            comments: []
-        };
+    const imageUrl = URL.createObjectURL(file);
+
+    const artworks = loadArtworks();
+    const newArt = {
+        id: Date.now().toString(),
+        title,
+        artist: currentUser.username,
+        owner: currentUser.username,
+        imageUrl,
+        description,
+        votes: 0,
+        comments: []
+    };
+
         artworks.push(newArt);
         saveArtworks(artworks);
 
         uploadForm.reset();
-        renderFeed();
+        preview.style.display = "none";
+
+        renderFeed(true);
         showView("home");
     });
 
@@ -268,14 +309,28 @@ function setupForms() {
 // ---------- Upvotes ----------
 
 function upvoteArtwork(id) {
+    const upvoted = loadUpvoted();
+
+    if (upvoted.includes(id)) {
+        return; // already upvoted, do nothing
+    }
+
+    upvoted.push(id);
+    saveUpvoted(upvoted);
+
     const artworks = loadArtworks();
     const art = artworks.find(a => a.id === id);
     if (!art) return;
+
     art.votes += 1;
     saveArtworks(artworks);
-    renderFeed();
+
+    // Refresh UI
+    renderFeed(true);
+
     const currentView = document.querySelector("#view-detail.view.active");
     if (currentView) openDetail(id);
+
     renderProfile();
 }
 
@@ -321,9 +376,18 @@ function openDetail(id) {
         commentsList.appendChild(div);
     });
 
-    container.querySelector("#detailUpvoteBtn").addEventListener("click", () => {
-        upvoteArtwork(art.id);
-    });
+    const detailUpvoteBtn = container.querySelector("#detailUpvoteBtn");
+    const upvoted = loadUpvoted();
+
+    if (upvoted.includes(art.id)) {
+        detailUpvoteBtn.classList.add("disabled");
+        detailUpvoteBtn.textContent = "Upvoted";
+        detailUpvoteBtn.disabled = true;
+    } else {
+        detailUpvoteBtn.addEventListener("click", () => {
+            upvoteArtwork(art.id);
+        });
+    }
 
     const commentForm = container.querySelector("#commentForm");
     commentForm.addEventListener("submit", (e) => {
@@ -395,4 +459,42 @@ document.addEventListener("DOMContentLoaded", () => {
     setupNav();
     setupForms();
     renderFeed();
+
+    const darkToggle = document.getElementById("darkModeToggle");
+    if (darkToggle) {
+        darkToggle.addEventListener("click", () => {
+            document.body.classList.toggle("dark");
+            localStorage.setItem("darkMode", document.body.classList.contains("dark"));
+        });
+    }
+
+    if (localStorage.getItem("darkMode") === "true") {
+        document.body.classList.add("dark");
+    }
+    window.addEventListener("scroll", () => {
+        if (isLoadingMore) return;
+
+        const scrollPos = window.innerHeight + window.scrollY;
+        const bottom = document.body.offsetHeight - 300;
+
+        if (scrollPos >= bottom) {
+            isLoadingMore = true;
+            renderFeed();
+        }
+    });
 });
+
+function showLoading() {
+    document.getElementById("loadingOverlay").style.display = "flex";
+}
+function hideLoading() {
+    document.getElementById("loadingOverlay").style.display = "none";
+}
+
+function loadUpvoted() {
+    return JSON.parse(localStorage.getItem(LS_KEY_UPVOTED) || "[]");
+}
+
+function saveUpvoted(list) {
+    localStorage.setItem(LS_KEY_UPVOTED, JSON.stringify(list));
+}

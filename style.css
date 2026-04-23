@@ -66,27 +66,37 @@ main {
     display: block;
 }
 
-/* Feed & Grid */
 .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 20px;
-    margin-top: 15px;
+    column-count: 4;
+    column-gap: 20px;
 }
 
-/* Cards */
 .card {
-    background: white;
-    border-radius: 10px;
-    padding: 15px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-    cursor: pointer;
+    break-inside: avoid;
+    margin-bottom: 20px;
+}
+
+/* Responsive Masonry */
+@media (max-width: 1200px) {
+    .grid { column-count: 3; }
+}
+
+@media (max-width: 900px) {
+    .grid { column-count: 2; }
+}
+
+@media (max-width: 600px) {
+    .grid { column-count: 1; }
+}
+
+.card.visible {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 .card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 6px 14px rgba(0,0,0,0.12);
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.15);
 }
 
 .card img {
@@ -121,8 +131,39 @@ main {
     font-size: 0.85rem;
 }
 
+.detail-upvote-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 15px 0;
+}
+
 .upvote-btn:hover {
     background: #e62e5c;
+}
+
+.upvote-btn:active {
+    transform: scale(1.2);
+}
+
+.upvote-btn.disabled:hover {
+    transform: none;
+}
+
+@keyframes pop {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.3); }
+    100% { transform: scale(1); }
+}
+
+.upvote-btn.clicked {
+    animation: pop 0.3s ease;
+}
+
+.upvote-btn.disabled {
+    background: #555;
+    cursor: default;
+    opacity: 0.6;
 }
 
 .votes {
@@ -304,4 +345,131 @@ button[type="submit"]:hover {
     height: auto;
     object-fit: contain;
     filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));
+}
+
+@media (max-width: 900px) {
+    .grid { column-count: 2; }
+}
+
+@media (max-width: 600px) {
+    .grid { column-count: 1; }
+}
+
+#floatingUploadBtn {
+    position: fixed;
+    bottom: 25px;
+    right: 25px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: #ff3366;
+    color: white;
+    font-size: 2rem;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.2);
+    transition: transform 0.2s ease;
+}
+
+#floatingUploadBtn:hover {
+    transform: scale(1.1);
+}
+
+#darkModeToggle {
+    position: fixed;
+    top: 80px;
+    left: 20px;
+    background: #111;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
+body.dark {
+    background: #111;
+    color: #eee;
+}
+
+body.dark .card {
+    background: #222;
+}
+
+body.dark .navbar {
+    background: #000;
+}
+
+body.dark input[type="text"],
+body.dark input[type="email"],
+body.dark input[type="password"],
+body.dark input[type="url"],
+body.dark textarea {
+    background: #2a2a2a;
+    color: #eee;
+    border-color: #555;
+}
+
+body.dark input::placeholder,
+body.dark textarea::placeholder {
+    color: #888;
+}
+
+
+body.dark main {
+    background: #111;
+    color: #eee;
+}
+
+body.dark .view {
+    color: #eee;
+}
+
+body.dark .detail-container {
+    background: #1c1c1c;
+    color: #eee;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+}
+
+body.dark .detail-meta .tags {
+    color: #aaa;
+}
+
+body.dark .comment {
+    border-bottom-color: #444;
+}
+
+body.dark #view-login,
+body.dark #view-signup {
+    background: #1c1c1c;
+    color: #eee;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+}
+
+body.dark button[type="submit"],
+body.dark .upvote-btn,
+body.dark .back-btn {
+    background: #eee;
+    color: #111;
+    border-color: #555;
+}
+
+body.dark button[type="submit"]:hover {
+    background: #ccc;
+}
+
+body.dark .profile-header {
+    color: #eee;
+}
+
+body.dark .card {
+    background: #1c1c1c;
+    color: #eee;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+}
+
+body.dark #loadingOverlay {
+    background: rgba(0,0,0,0.6);
+    color: #eee;
 }

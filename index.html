@@ -17,10 +17,13 @@
             <li class="guest-only"><a href="#" data-view="signup">Sign Up</a></li>
             <li class="auth-only"><a href="#" id="logoutBtn">Logout</a></li>
         </ul>
+
         <div class="user-info auth-only">
             <span id="currentUserName"></span>
         </div>
     </nav>
+
+    <button id="darkModeToggle">🌙</button>
 
     <main>
         <!-- Home feed -->
@@ -80,9 +83,11 @@
                     <input type="text" id="artTitle" required>
                 </label>
                 <label>
-                    Image URL
-                    <input type="url" id="artImageUrl" placeholder="https://..." required>
+                    Upload Image
+                    <input type="file" id="artImageFile" accept="image/*" required>
+                    <img id="uploadPreview" style="max-width: 100%; margin-top: 10px; display: none; border-radius: 8px;">
                 </label>
+
                 <label>
                     Description / Story
                     <textarea id="artDescription" rows="4" required></textarea>
@@ -112,6 +117,9 @@
             <h3>Your Artwork</h3>
             <div id="profileGrid" class="grid"></div>
         </section>
+
+        <button id="floatingUploadBtn" data-view="upload">＋</button>
+
     </main>
 
     <script src="script.js"></script>

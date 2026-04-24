@@ -263,6 +263,21 @@ function setupForms() {
         const password = document.getElementById("signupPassword").value;
         signup(username, email, password);
     });
+
+    const guestLoginBtn = document.getElementById("guestLoginBtn");
+    guestLoginBtn.addEventListener("click", () => {
+        const guestUser = {
+            id: 0,
+            username: "Guest",
+            email: "guest@dev.local",
+            created_at: new Date().toISOString()
+        };
+        // We don't need a real token for guest mode
+        localStorage.removeItem(LS_KEY_TOKEN);
+        updateAuthUI(guestUser);
+        showView("home");
+        renderFeed();
+    });
 }
 
 // ---------- Upvotes ----------

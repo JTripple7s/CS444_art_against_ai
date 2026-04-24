@@ -228,6 +228,26 @@ textarea {
     margin-bottom: 20px;
 }
 
+.form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.secondary-btn {
+    margin-top: 10px;
+    padding: 8px 16px;
+    background: #555;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.secondary-btn:hover {
+    background: #777;
+}
+
 #view-login, #view-signup {
     max-width: 400px;
     margin: 40px auto;

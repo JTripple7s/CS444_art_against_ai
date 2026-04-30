@@ -3,11 +3,12 @@ const API_URL = "http://localhost:5000/api";
 
 // Auth State
 let currentUser = null;
-let followingList = []; // Array of integers
+let followingList = []; 
 
 // LocalStorage keys
 const LS_KEY_TOKEN = "artAgainstAI_token";
 const LS_KEY_VIEW = "artAgainstAI_currentView";
+const LS_KEY_DETAIL_ID = "artAgainstAI_currentDetailId";
 
 let feedPage = 1;
 const FEED_PAGE_SIZE = 12;
@@ -17,13 +18,10 @@ let currentDetailId = null;
 // ---------- Auth Helpers ----------
 
 async function fetchCurrentUser() {
-    const token = localStorage.getItem(LS_KEY_TOKEN);
-    if (!token) {
-        updateAuthUI(null);
-        return;
-    }
-
     try {
+        const token = localStorage.getItem(LS_KEY_TOKEN);
+        if (!token) { updateAuthUI(null); return; }
+
         const response = await fetch(`${API_URL}/auth/me`, {
             headers: { "Authorization": `Bearer ${token}` }
         });
@@ -37,27 +35,25 @@ async function fetchCurrentUser() {
             updateAuthUI(null);
         }
     } catch (error) {
-        console.error("Error fetching user:", error);
+        console.error("fetchCurrentUser error:", error);
         updateAuthUI(null);
     }
 }
 
 async function fetchFollowingList() {
-    const token = localStorage.getItem(LS_KEY_TOKEN);
-    if (!token) {
-        followingList = [];
-        return;
-    }
-
     try {
+        const token = localStorage.getItem(LS_KEY_TOKEN);
+        if (!token) { followingList = []; return; }
+
         const response = await fetch(`${API_URL}/users/following`, {
             headers: { "Authorization": `Bearer ${token}` }
         });
         if (response.ok) {
-            followingList = await response.json(); // Array of integers
+            const ids = await response.json();
+            followingList = ids.map(id => parseInt(id));
         }
     } catch (error) {
-        console.error("Error fetching following list:", error);
+        console.error("fetchFollowingList error:", error);
     }
 }
 
@@ -94,7 +90,6 @@ async function login(email, password) {
         }
     } catch (error) {
         console.error("Login error:", error);
-        alert("An error occurred during login.");
     }
 }
 
@@ -118,12 +113,13 @@ async function signup(username, email, password) {
         }
     } catch (error) {
         console.error("Signup error:", error);
-        alert(`An error occurred during signup: ${error.message}`);
     }
 }
 
 function logout() {
     localStorage.removeItem(LS_KEY_TOKEN);
+    localStorage.removeItem(LS_KEY_VIEW);
+    localStorage.removeItem(LS_KEY_DETAIL_ID);
     updateAuthUI(null);
     followingList = [];
     showView("home");
@@ -138,12 +134,13 @@ function getActiveView() {
 }
 
 function showView(viewId) {
-    // Save to local storage for persistence on refresh
+    const targetView = document.getElementById("view-" + viewId);
+    if (!targetView) return;
+
     localStorage.setItem(LS_KEY_VIEW, viewId);
 
     document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
-    const targetView = document.getElementById("view-" + viewId);
-    if (targetView) targetView.classList.add("active");
+    targetView.classList.add("active");
     
     window.scrollTo(0, 0);
 }
@@ -151,100 +148,116 @@ function showView(viewId) {
 // ---------- Core Rendering ----------
 
 async function renderFeed(reset = false) {
-    const grid = document.getElementById("feedGrid");
-    if (!grid) return;
+    try {
+        const grid = document.getElementById("feedGrid");
+        if (!grid) return;
 
-    if (reset) {
-        grid.innerHTML = "";
-        feedPage = 1;
+        if (reset) {
+            grid.innerHTML = "";
+            feedPage = 1;
+        }
+
+        const artworks = await loadArtworks();
+        
+        // Show all artworks if resetting, otherwise paginate
+        const pageItems = reset ? artworks : artworks.slice((feedPage - 1) * FEED_PAGE_SIZE, feedPage * FEED_PAGE_SIZE);
+
+        pageItems.forEach(art => {
+            // Check if card already exists to avoid duplicates
+            if (grid.querySelector(`.card[data-id="${art.id}"]`)) return;
+
+            const card = document.createElement("div");
+            card.className = "card";
+            card.dataset.id = art.id;
+
+            const fullImageUrl = art.image_url.startsWith("/") ? `http://localhost:5000${art.image_url}` : art.image_url;
+
+            card.innerHTML = `
+                <img src="${fullImageUrl}" alt="${art.title}">
+                <div class="overlay-actions">
+                    <div class="top-actions">
+                        <button type="button" class="mini-follow-btn action-follow" data-artist-id="${art.user_id}">Follow</button>
+                    </div>
+                    <div class="bottom-actions">
+                        <button type="button" class="upvote-btn action-upvote" data-id="${art.id}">▲</button>
+                        <span class="votes-count" style="color: white; text-shadow: 0 1px 4px rgba(0,0,0,0.8); font-weight: bold;">${art.votes || 0}</span>
+                    </div>
+                </div>
+                <h3>${art.title}</h3>
+                <div class="card-meta-row">
+                    <p class="artist">by ${art.artist}</p>
+                </div>
+            `;
+
+            updateCardUI(card, art);
+            grid.appendChild(card);
+            observer.observe(card);
+        });
+
+        if (!reset) feedPage++;
+        isLoadingMore = false;
+    } catch (e) {
+        console.error("renderFeed error:", e);
     }
-
-    const artworks = await loadArtworks();
-    const start = (feedPage - 1) * FEED_PAGE_SIZE;
-    const end = start + FEED_PAGE_SIZE;
-    const pageItems = artworks.slice(start, end);
-
-    pageItems.forEach(art => {
-        const card = document.createElement("div");
-        card.className = "card";
-        card.dataset.id = art.id;
-
-        const fullImageUrl = art.image_url.startsWith("/") ? `http://localhost:5000${art.image_url}` : art.image_url;
-
-        card.innerHTML = `
-            <img src="${fullImageUrl}" alt="${art.title}">
-            <div class="overlay-actions">
-                <div class="top-actions">
-                    <button type="button" class="mini-follow-btn action-follow" data-artist-id="${art.user_id}">Follow</button>
-                </div>
-                <div class="bottom-actions">
-                    <button type="button" class="upvote-btn action-upvote" data-id="${art.id}">▲</button>
-                    <span class="votes-count" style="color: white; text-shadow: 0 1px 4px rgba(0,0,0,0.8); font-weight: bold;">${art.votes || 0}</span>
-                </div>
-            </div>
-            <h3>${art.title}</h3>
-            <div class="card-meta-row">
-                <p class="artist">by ${art.artist}</p>
-            </div>
-        `;
-
-        updateCardUI(card, art);
-        grid.appendChild(card);
-    });
-
-    feedPage++;
-    isLoadingMore = false;
 }
 
 async function renderProfile() {
-    if (!currentUser) return;
+    try {
+        if (!currentUser) return;
 
-    const grid = document.getElementById("profileGrid");
-    const totalUpvotesEl = document.getElementById("profileTotalUpvotes");
-    if (!grid || !totalUpvotesEl) return;
+        const grid = document.getElementById("profileGrid");
+        if (!grid) return;
 
-    grid.innerHTML = "";
-    await updateProfileStatsUI();
+        await updateProfileStatsUI();
 
-    const artworks = await loadArtworks();
-    const myArtworks = artworks.filter(a => a.user_id === currentUser.id);
-    let totalVotes = 0;
+        const artworks = await loadArtworks();
+        const myArtworks = artworks.filter(a => parseInt(a.user_id) === parseInt(currentUser.id));
+        
+        grid.innerHTML = "";
+        let totalVotes = 0;
 
-    myArtworks.forEach(art => {
-        totalVotes += (art.votes || 0);
-        const card = document.createElement("div");
-        card.className = "card card-profile";
-        card.dataset.id = art.id;
-        const fullImageUrl = art.image_url.startsWith("/") ? `http://localhost:5000${art.image_url}` : art.image_url;
-        card.innerHTML = `
-            <img src="${fullImageUrl}" alt="${art.title}">
-            <div class="overlay-actions">
-                <div class="bottom-actions">
-                    <button type="button" class="upvote-btn action-upvote" data-id="${art.id}">▲</button>
-                    <span class="votes-count" style="color: white; text-shadow: 0 1px 4px rgba(0,0,0,0.8); font-weight: bold;">${art.votes || 0}</span>
+        myArtworks.forEach(art => {
+            totalVotes += (art.votes || 0);
+            const card = document.createElement("div");
+            card.className = "card card-profile";
+            card.dataset.id = art.id;
+            const fullImageUrl = art.image_url.startsWith("/") ? `http://localhost:5000${art.image_url}` : art.image_url;
+            card.innerHTML = `
+                <img src="${fullImageUrl}" alt="${art.title}">
+                <div class="overlay-actions">
+                    <div class="bottom-actions">
+                        <button type="button" class="upvote-btn action-upvote" data-id="${art.id}">▲</button>
+                        <span class="votes-count" style="color: white; text-shadow: 0 1px 4px rgba(0,0,0,0.8); font-weight: bold;">${art.votes || 0}</span>
+                    </div>
                 </div>
-            </div>
-            <h3>${art.title}</h3>
-            <p class="artist">${art.votes || 0} votes</p>
-        `;
-        updateCardUI(card, art);
-        grid.appendChild(card);
-    });
+                <h3>${art.title}</h3>
+                <p class="artist">${art.votes || 0} votes</p>
+            `;
+            updateCardUI(card, art);
+            grid.appendChild(card);
+        });
 
-    totalUpvotesEl.textContent = totalVotes;
+        const totalUpvotesEl = document.getElementById("profileTotalUpvotes");
+        if (totalUpvotesEl) totalUpvotesEl.textContent = totalVotes;
+    } catch (e) {
+        console.error("renderProfile error:", e);
+    }
 }
 
 async function openDetail(id) {
-    const token = localStorage.getItem(LS_KEY_TOKEN);
-    const headers = {};
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
+    if (!id) return;
     try {
+        const token = localStorage.getItem(LS_KEY_TOKEN);
+        const headers = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
         const response = await fetch(`${API_URL}/artworks/${id}`, { headers });
         if (!response.ok) throw new Error("Artwork not found");
         const art = await response.json();
 
-        currentDetailId = id;
+        currentDetailId = parseInt(id);
+        localStorage.setItem(LS_KEY_DETAIL_ID, id);
+
         const container = document.getElementById("detailContainer");
         const fullImageUrl = art.image_url.startsWith("/") ? `http://localhost:5000${art.image_url}` : art.image_url;
 
@@ -273,13 +286,14 @@ async function openDetail(id) {
         updateDetailUI(art);
         showView("detail");
     } catch (error) {
-        console.error("Detail load error:", error);
+        console.error("openDetail error:", error);
     }
 }
 
-// ---------- Surgical UI Helpers ----------
+// ---------- UI Synchronization ----------
 
 function updateCardUI(card, art) {
+    if (!card || !art) return;
     const upvoteBtn = card.querySelector(".upvote-btn");
     const votesCount = card.querySelector(".votes-count");
     const followBtn = card.querySelector(".mini-follow-btn");
@@ -296,7 +310,7 @@ function updateCardUI(card, art) {
     }
 
     if (followBtn) {
-        if (!currentUser || currentUser.id === art.user_id) {
+        if (!currentUser || parseInt(currentUser.id) === parseInt(art.user_id)) {
             followBtn.style.display = "none";
         } else {
             followBtn.style.display = "block";
@@ -312,6 +326,7 @@ function updateCardUI(card, art) {
 }
 
 function updateDetailUI(art) {
+    if (!art) return;
     const upvoteBtn = document.getElementById("detailUpvoteBtn");
     const votesText = document.getElementById("detailVotes");
     const followBtn = document.querySelector("#view-detail .follow-btn");
@@ -328,7 +343,7 @@ function updateDetailUI(art) {
     if (votesText) votesText.textContent = `${art.votes || 0} votes`;
 
     if (followBtn) {
-        if (!currentUser || currentUser.id === art.user_id) {
+        if (!currentUser || parseInt(currentUser.id) === parseInt(art.user_id)) {
             followBtn.style.display = "none";
         } else {
             followBtn.style.display = "inline-block";
@@ -344,41 +359,33 @@ function updateDetailUI(art) {
 }
 
 async function updateProfileStatsUI() {
-    if (!currentUser) return;
-    
-    const usernameEl = document.getElementById("profileUsername");
-    const avatarEl = document.querySelector("#view-profile .avatar");
-    const followersEl = document.getElementById("profileFollowersCount");
-    const followingEl = document.getElementById("profileFollowingCount");
-
-    if (usernameEl) usernameEl.textContent = `@${currentUser.username}`;
-    if (avatarEl) avatarEl.textContent = currentUser.username.substring(0, 2).toUpperCase();
-    if (followersEl) followersEl.textContent = currentUser.followers_count || 0;
-    if (followingEl) followingEl.textContent = currentUser.following_count || 0;
+    try {
+        if (!currentUser) return;
+        const usernameEl = document.getElementById("profileUsername");
+        const followersEl = document.getElementById("profileFollowersCount");
+        const followingEl = document.getElementById("profileFollowingCount");
+        if (usernameEl) usernameEl.textContent = `@${currentUser.username}`;
+        if (followersEl) followersEl.textContent = currentUser.followers_count || 0;
+        if (followingEl) followingEl.textContent = currentUser.following_count || 0;
+    } catch (e) {}
 }
 
 async function updateSurgical(artworkId) {
-    const token = localStorage.getItem(LS_KEY_TOKEN);
-    const headers = {};
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
     try {
+        const token = localStorage.getItem(LS_KEY_TOKEN);
+        const headers = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
         const response = await fetch(`${API_URL}/artworks/${artworkId}`, { headers });
         if (response.ok) {
             const art = await response.json();
-            
-            // 1. Update all matching cards
             const cards = document.querySelectorAll(`.card[data-id="${artworkId}"]`);
             cards.forEach(card => updateCardUI(card, art));
-
-            // 2. Update detail view
-            if (getActiveView() === "detail" && currentDetailId == artworkId) {
+            if (getActiveView() === "detail" && parseInt(currentDetailId) === parseInt(artworkId)) {
                 updateDetailUI(art);
             }
-            
-            // 3. Update profile totals if needed (optional optimization)
         }
-    } catch (e) { console.error("Surgical update failed", e); }
+    } catch (e) {}
 }
 
 // ---------- Social Actions ----------
@@ -386,7 +393,6 @@ async function updateSurgical(artworkId) {
 async function upvoteArtwork(id, isCurrentlyUpvoted) {
     const token = localStorage.getItem(LS_KEY_TOKEN);
     if (!token) { alert("Please log in to upvote."); showView("login"); return; }
-
     try {
         const response = await fetch(`${API_URL}/artworks/${id}/upvote`, {
             method: isCurrentlyUpvoted ? "DELETE" : "POST",
@@ -394,38 +400,35 @@ async function upvoteArtwork(id, isCurrentlyUpvoted) {
         });
         if (response.ok) {
             await updateSurgical(id);
+            if (getActiveView() === "profile") await renderProfile();
         }
-    } catch (error) { console.error("Upvote error:", error); }
+    } catch (e) {}
 }
 
 async function handleFollowAction(targetUserId) {
     const token = localStorage.getItem(LS_KEY_TOKEN);
     if (!token) { alert("Please log in to follow."); showView("login"); return; }
-
-    const currentlyFollowing = isFollowing(targetUserId);
-    const method = currentlyFollowing ? "POST" : "POST"; // Backend uses specific paths
-    const path = currentlyFollowing ? "unfollow" : "follow";
-
+    const path = isFollowing(targetUserId) ? "unfollow" : "follow";
     try {
         const response = await fetch(`${API_URL}/users/${targetUserId}/${path}`, {
             method: "POST",
             headers: { "Authorization": `Bearer ${token}` }
         });
-
         if (response.ok) {
             await fetchFollowingList();
-            await fetchCurrentUser(); // Get new counts
-            
-            // Refresh visible elements
-            const artistCards = document.querySelectorAll(`.mini-follow-btn[data-artist-id="${targetUserId}"]`);
-            for (const btn of artistCards) {
+            await fetchCurrentUser();
+            // Surgical refresh for everything visible for this artist
+            document.querySelectorAll(`[data-artist-id="${targetUserId}"]`).forEach(btn => {
                 const card = btn.closest(".card");
-                if (card) await updateSurgical(card.dataset.id);
-            }
-            if (getActiveView() === "detail" && currentDetailId) await updateSurgical(currentDetailId);
+                if (card) updateSurgical(card.dataset.id);
+                else {
+                    // It might be a button in the detail view
+                    if (getActiveView() === "detail" && currentDetailId) updateSurgical(currentDetailId);
+                }
+            });
             if (getActiveView() === "profile") await updateProfileStatsUI();
         }
-    } catch (error) { console.error("Follow error:", error); }
+    } catch (e) {}
 }
 
 function isFollowing(targetUserId) {
@@ -435,43 +438,40 @@ function isFollowing(targetUserId) {
 // ---------- Data Loading ----------
 
 async function loadArtworks() {
-    const token = localStorage.getItem(LS_KEY_TOKEN);
-    const headers = {};
-    if (token) headers["Authorization"] = `Bearer ${token}`;
     try {
+        const token = localStorage.getItem(LS_KEY_TOKEN);
+        const headers = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
         const response = await fetch(`${API_URL}/artworks`, { headers });
         return response.ok ? await response.json() : [];
     } catch (e) { return []; }
 }
 
-// ---------- Initialization ----------
+const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) { entry.target.classList.add("visible"); }
+    });
+}, { threshold: 0.1 });
+
+// ---------- Main Event Delegator ----------
 
 document.addEventListener("DOMContentLoaded", async () => {
     await fetchCurrentUser();
     setupForms();
 
-    // Restore View
     const savedView = localStorage.getItem(LS_KEY_VIEW) || "home";
+    const savedDetailId = localStorage.getItem(LS_KEY_DETAIL_ID);
+    
     if (savedView === "home") await renderFeed(true);
     if (savedView === "profile") await renderProfile();
+    if (savedView === "detail" && savedDetailId) await openDetail(savedDetailId);
+    
     showView(savedView);
 
-    // MASTER DELEGATOR
     document.addEventListener("click", async (e) => {
         const target = e.target;
 
-        // 1. Navigation / View Switches
-        const viewLink = target.closest("[data-view]");
-        if (viewLink) {
-            e.preventDefault();
-            const view = viewLink.getAttribute("data-view");
-            if (view === "home") await renderFeed(true);
-            if (view === "profile") await renderProfile();
-            showView(view);
-            return;
-        }
-
-        // 2. Upvote
+        // --- 1. Social Action: Upvote ---
         const upvoteBtn = target.closest(".action-upvote");
         if (upvoteBtn) {
             e.preventDefault();
@@ -482,7 +482,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             return;
         }
 
-        // 3. Follow
+        // --- 2. Social Action: Follow ---
         const followBtn = target.closest(".action-follow");
         if (followBtn) {
             e.preventDefault();
@@ -492,21 +492,34 @@ document.addEventListener("DOMContentLoaded", async () => {
             return;
         }
 
-        // 4. Card click (Detail)
+        // --- 3. Navigation: View Links ---
+        const viewLink = target.closest("[data-view]");
+        if (viewLink) {
+            e.preventDefault();
+            e.stopPropagation();
+            const view = viewLink.getAttribute("data-view");
+            if (view === "home") await renderFeed(true);
+            if (view === "profile") await renderProfile();
+            showView(view);
+            return;
+        }
+
+        // --- 4. Navigation: Card Detail ---
         const card = target.closest(".card");
         if (card && !target.closest("button")) {
             e.preventDefault();
+            e.stopPropagation();
             await openDetail(card.dataset.id);
             return;
         }
 
-        // 5. Logout
+        // --- 5. Action: Logout ---
         if (target.id === "logoutBtn" || target.closest("#logoutBtn")) {
             e.preventDefault();
             logout();
         }
 
-        // 6. Guest Login
+        // --- 6. Action: Guest Login ---
         if (target.id === "guestLoginBtn") {
             e.preventDefault();
             const guestUser = { id: 0, username: "Guest", email: "guest@dev.local", created_at: new Date().toISOString() };
@@ -532,7 +545,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.addEventListener("scroll", async () => {
         if (isLoadingMore || getActiveView() !== "home") return;
         const scrollPos = window.innerHeight + window.scrollY;
-        if (scrollPos >= document.body.offsetHeight - 300) {
+        if (scrollPos >= document.body.offsetHeight - 400) {
             isLoadingMore = true;
             await renderFeed();
         }
@@ -570,17 +583,11 @@ function setupForms() {
     }
     const loginForm = document.getElementById("loginForm");
     if (loginForm) {
-        loginForm.addEventListener("submit", (e) => {
-            e.preventDefault();
-            login(document.getElementById("loginEmail").value, document.getElementById("loginPassword").value);
-        });
+        loginForm.addEventListener("submit", (e) => { e.preventDefault(); login(document.getElementById("loginEmail").value, document.getElementById("loginPassword").value); });
     }
     const signupForm = document.getElementById("signupForm");
     if (signupForm) {
-        signupForm.addEventListener("submit", (e) => {
-            e.preventDefault();
-            signup(document.getElementById("signupUsername").value, document.getElementById("signupEmail").value, document.getElementById("signupPassword").value);
-        });
+        signupForm.addEventListener("submit", (e) => { e.preventDefault(); signup(document.getElementById("signupUsername").value, document.getElementById("signupEmail").value, document.getElementById("signupPassword").value); });
     }
     const fileInput = document.getElementById("artImageFile");
     const preview = document.getElementById("uploadPreview");

@@ -12,9 +12,11 @@ async function getUserByEmail(email) {
 async function getUserById(id) {
   const db = getDB();
   return db.get(`
-    SELECT id, username, email, created_at
-    FROM users
-    WHERE id = ?
+    SELECT u.id, u.username, u.email, u.created_at,
+    (SELECT COUNT(*) FROM follows WHERE followed_id = u.id) as followers_count,
+    (SELECT COUNT(*) FROM follows WHERE follower_id = u.id) as following_count
+    FROM users u
+    WHERE u.id = ?
   `, [id]);
 }
 

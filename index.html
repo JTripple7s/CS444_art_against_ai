@@ -101,7 +101,7 @@
 
         <!-- detail page -->
         <section id="view-detail" class="view">
-            <button class="back-btn" data-view="home">← Back to Feed</button>
+            <button type="button" class="back-btn" data-view="home">← Back to Feed</button>
             <div id="detailContainer" class="detail-container">
             </div>
         </section>
@@ -111,17 +111,21 @@
             <h2>Your Profile</h2>
             <div class="profile-header">
                 <div class="avatar">DS</div>
-                <div>
-                    <h3>@DesignStudent</h3>
-                    <p>Art student & creative enthusiast. Sharing human-made art.</p>
-                    <p><strong>Total Upvotes:</strong> <span id="profileTotalUpvotes">0</span></p>
+                <div class="profile-info">
+                    <h3 id="profileUsername">@DesignStudent</h3>
+                    <p id="profileBio">Art student & creative enthusiast. Sharing human-made art.</p>
+                    <div class="profile-stats">
+                        <p><strong>Followers:</strong> <span id="profileFollowersCount">0</span></p>
+                        <p><strong>Following:</strong> <span id="profileFollowingCount">0</span></p>
+                        <p><strong>Total Upvotes:</strong> <span id="profileTotalUpvotes">0</span></p>
+                    </div>
                 </div>
             </div>
             <h3>Your Artwork</h3>
             <div id="profileGrid" class="grid"></div>
         </section>
 
-        <button id="floatingUploadBtn" data-view="upload">＋</button>
+        <button type="button" id="floatingUploadBtn" data-view="upload">＋</button>
 
     </main>
 

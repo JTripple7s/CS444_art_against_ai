@@ -25,6 +25,49 @@ async function initDB() {
     )
   `);
 
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS artworks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      description TEXT,
+      image_url TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
+      vote_count INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users (id)
+    )
+  `);
+
+  // Try to add vote_count if it doesn't exist (for existing databases)
+  try {
+    await db.exec("ALTER TABLE artworks ADD COLUMN vote_count INTEGER DEFAULT 0");
+  } catch (e) {
+    // Column might already exist
+  }
+
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS follows (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      follower_id INTEGER NOT NULL,
+      followed_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (follower_id) REFERENCES users (id),
+      FOREIGN KEY (followed_id) REFERENCES users (id),
+      UNIQUE(follower_id, followed_id)
+    )
+  `);
+
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS artwork_votes (
+      user_id INTEGER NOT NULL,
+      artwork_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, artwork_id),
+      FOREIGN KEY (user_id) REFERENCES users (id),
+      FOREIGN KEY (artwork_id) REFERENCES artworks (id)
+    )
+  `);
+
   return db;
 }
 

@@ -3,18 +3,15 @@ const API_URL = "http://localhost:5000/api";
 
 // Auth State
 let currentUser = null;
+let followingList = []; // Array of integers
 
 // LocalStorage keys
 const LS_KEY_TOKEN = "artAgainstAI_token";
-const LS_KEY_ARTWORKS = "artAgainstAI_artworks";
-const LS_KEY_UPVOTED = "artAgainstAI_upvoted";
-const LS_KEY_FOLLOWERS = "artAgainstAI_followers";
+const LS_KEY_VIEW = "artAgainstAI_currentView";
 
 let feedPage = 1;
-const FEED_PAGE_SIZE = 10;
+const FEED_PAGE_SIZE = 12;
 let isLoadingMore = false;
-
-// Track current detail id for refreshing detail view after follow/unfollow
 let currentDetailId = null;
 
 // ---------- Auth Helpers ----------
@@ -28,22 +25,39 @@ async function fetchCurrentUser() {
 
     try {
         const response = await fetch(`${API_URL}/auth/me`, {
-            headers: {
-                "Authorization": `Bearer ${token}`
-            }
+            headers: { "Authorization": `Bearer ${token}` }
         });
 
         if (response.ok) {
             const data = await response.json();
             updateAuthUI(data.user);
+            await fetchFollowingList(); 
         } else {
-            // Token might be invalid or expired
             localStorage.removeItem(LS_KEY_TOKEN);
             updateAuthUI(null);
         }
     } catch (error) {
         console.error("Error fetching user:", error);
         updateAuthUI(null);
+    }
+}
+
+async function fetchFollowingList() {
+    const token = localStorage.getItem(LS_KEY_TOKEN);
+    if (!token) {
+        followingList = [];
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/users/following`, {
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (response.ok) {
+            followingList = await response.json(); // Array of integers
+        }
+    } catch (error) {
+        console.error("Error fetching following list:", error);
     }
 }
 
@@ -72,8 +86,9 @@ async function login(email, password) {
         if (response.ok) {
             localStorage.setItem(LS_KEY_TOKEN, data.token);
             updateAuthUI(data.user);
+            await fetchFollowingList();
             showView("home");
-            renderFeed(true);
+            await renderFeed(true);
         } else {
             alert(data.message || "Login failed");
         }
@@ -95,8 +110,9 @@ async function signup(username, email, password) {
         if (response.ok) {
             localStorage.setItem(LS_KEY_TOKEN, data.token);
             updateAuthUI(data.user);
+            await fetchFollowingList();
             showView("home");
-            renderFeed(true);
+            await renderFeed(true);
         } else {
             alert(data.message || "Signup failed");
         }
@@ -109,95 +125,32 @@ async function signup(username, email, password) {
 function logout() {
     localStorage.removeItem(LS_KEY_TOKEN);
     updateAuthUI(null);
+    followingList = [];
     showView("home");
     renderFeed(true);
 }
 
-// ---------- Data Helpers ----------
+// ---------- View Management ----------
 
-function loadArtworks() {
-    const raw = localStorage.getItem(LS_KEY_ARTWORKS);
-    if (!raw) {
-        const seed = [
-            {
-                id: "1",
-                title: "Sunset Dreams",
-                artist: "Alex Rivera",
-                owner: "alex_rivera",
-                imageUrl: "https://via.placeholder.com/600x400?text=Sunset+Dreams",
-                description: "A warm, hand-painted sunset inspired by late studio nights.",
-                votes: 3,
-                comments: [
-                    { author: "@ArtFriend", text: "Love the colors!" }
-                ]
-            },
-            {
-                id: "2",
-                title: "Paper Sculpture",
-                artist: "Jamie Lee",
-                owner: "jamie_lee",
-                imageUrl: "https://via.placeholder.com/600x400?text=Paper+Sculpture",
-                description: "Layered paper sculpture exploring texture and shadow.",
-                votes: 5,
-                comments: []
-            }
-        ];
-        localStorage.setItem(LS_KEY_ARTWORKS, JSON.stringify(seed));
-        return seed;
-    }
-    return JSON.parse(raw);
+function getActiveView() {
+    const active = document.querySelector(".view.active");
+    return active ? active.id.replace("view-", "") : "home";
 }
-
-function saveArtworks(artworks) {
-    localStorage.setItem(LS_KEY_ARTWORKS, JSON.stringify(artworks));
-}
-
-function getArtworkById(id) {
-    const artworks = loadArtworks();
-    return artworks.find(a => a.id === id);
-}
-
-// ---------- View Navigation ----------
 
 function showView(viewId) {
+    // Save to local storage for persistence on refresh
+    localStorage.setItem(LS_KEY_VIEW, viewId);
+
     document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
     const targetView = document.getElementById("view-" + viewId);
     if (targetView) targetView.classList.add("active");
+    
+    window.scrollTo(0, 0);
 }
 
-function setupNav() {
-    document.querySelectorAll("[data-view]").forEach(link => {
-        link.addEventListener("click", (e) => {
-            e.preventDefault();
-            const view = link.getAttribute("data-view");
-            if (view) {
-                showView(view);
-                if (view === "home") renderFeed(true);
-                if (view === "profile") renderProfile();
-            }
-        });
-    });
+// ---------- Core Rendering ----------
 
-    const logoutBtn = document.getElementById("logoutBtn");
-    if (logoutBtn) {
-        logoutBtn.addEventListener("click", (e) => {
-            e.preventDefault();
-            logout();
-        });
-    }
-}
-
-// ---------- Feed Rendering ----------
-
-const observer = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-        if (entry.isIntersecting) {
-            entry.target.classList.add("visible");
-        }
-    });
-}, { threshold: 0.2 });
-
-function renderFeed(reset = false) {
+async function renderFeed(reset = false) {
     const grid = document.getElementById("feedGrid");
     if (!grid) return;
 
@@ -206,9 +159,7 @@ function renderFeed(reset = false) {
         feedPage = 1;
     }
 
-    const artworks = loadArtworks()
-        .sort((a, b) => b.votes - a.votes);
-
+    const artworks = await loadArtworks();
     const start = (feedPage - 1) * FEED_PAGE_SIZE;
     const end = start + FEED_PAGE_SIZE;
     const pageItems = artworks.slice(start, end);
@@ -216,405 +167,36 @@ function renderFeed(reset = false) {
     pageItems.forEach(art => {
         const card = document.createElement("div");
         card.className = "card";
+        card.dataset.id = art.id;
+
+        const fullImageUrl = art.image_url.startsWith("/") ? `http://localhost:5000${art.image_url}` : art.image_url;
 
         card.innerHTML = `
-            <img src="${art.imageUrl}" alt="${art.title}">
+            <img src="${fullImageUrl}" alt="${art.title}">
+            <div class="overlay-actions">
+                <div class="top-actions">
+                    <button type="button" class="mini-follow-btn action-follow" data-artist-id="${art.user_id}">Follow</button>
+                </div>
+                <div class="bottom-actions">
+                    <button type="button" class="upvote-btn action-upvote" data-id="${art.id}">▲</button>
+                    <span class="votes-count" style="color: white; text-shadow: 0 1px 4px rgba(0,0,0,0.8); font-weight: bold;">${art.votes || 0}</span>
+                </div>
+            </div>
             <h3>${art.title}</h3>
             <div class="card-meta-row">
                 <p class="artist">by ${art.artist}</p>
-                <button class="mini-follow-btn">Follow</button>
-            </div>
-            <div class="detail-upvote-row">
-                <button class="upvote-btn">▲ Upvote</button>
-                <span class="votes">${art.votes} votes</span>
             </div>
         `;
 
-        // Clicking card opens detail — unless clicking upvote or follow
-        card.addEventListener("click", (e) => {
-            if (e.target.classList.contains("upvote-btn") || e.target.classList.contains("mini-follow-btn")) return;
-            openDetail(art.id);
-        });
-
-        // Upvote wiring
-        const upvoteBtn = card.querySelector(".upvote-btn");
-        if (upvoteBtn) {
-            const upvoted = loadUpvoted();
-            if (upvoted.includes(art.id)) {
-                upvoteBtn.classList.add("disabled");
-                upvoteBtn.textContent = "Upvoted";
-                upvoteBtn.disabled = true;
-            } else {
-                upvoteBtn.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    upvoteArtwork(art.id);
-
-                    upvoteBtn.classList.add("clicked");
-                    setTimeout(() => upvoteBtn.classList.remove("clicked"), 300);
-                });
-            }
-        }
-
-        // Mini follow button wiring
-        const miniFollowBtn = card.querySelector(".mini-follow-btn");
-        if (miniFollowBtn) {
-            if (!currentUser || currentUser.username === art.owner) {
-                miniFollowBtn.classList.add("disabled");
-                miniFollowBtn.textContent = "You";
-                miniFollowBtn.disabled = true;
-            } else {
-                if (isFollowing(art.owner)) {
-                    miniFollowBtn.classList.add("following");
-                    miniFollowBtn.textContent = "Following";
-                } else {
-                    miniFollowBtn.textContent = "Follow";
-                }
-
-                miniFollowBtn.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    if (isFollowing(art.owner)) {
-                        unfollowUser(art.owner);
-                        miniFollowBtn.classList.remove("following");
-                        miniFollowBtn.textContent = "Follow";
-                    } else {
-                        followUser(art.owner);
-                        miniFollowBtn.classList.add("following");
-                        miniFollowBtn.textContent = "Following";
-                    }
-                });
-            }
-        }
-
+        updateCardUI(card, art);
         grid.appendChild(card);
-
-        // Observe only this new card
-        observer.observe(card);
     });
 
     feedPage++;
     isLoadingMore = false;
 }
 
-// ---------- Upload Handling ----------
-
-function setupForms() {
-    const uploadForm = document.getElementById("uploadForm");
-    const preview = document.getElementById("uploadPreview");
-
-    if (uploadForm) {
-        uploadForm.addEventListener("submit", (e) => {
-            e.preventDefault();
-            if (!currentUser) {
-                alert("You must be logged in to upload.");
-                showView("login");
-                return;
-            }
-
-            const title = document.getElementById("artTitle").value.trim();
-            const description = document.getElementById("artDescription").value.trim();
-            const fileInput = document.getElementById("artImageFile");
-            const file = fileInput.files[0];
-
-            if (!title || !description || !file) return;
-
-            const imageUrl = URL.createObjectURL(file);
-
-            const artworks = loadArtworks();
-            const newArt = {
-                id: Date.now().toString(),
-                title,
-                artist: currentUser.username,
-                owner: currentUser.username,
-                imageUrl,
-                description,
-                votes: 0,
-                comments: []
-            };
-
-            artworks.push(newArt);
-            saveArtworks(artworks);
-
-            uploadForm.reset();
-            if (preview) preview.style.display = "none";
-
-            renderFeed(true);
-            showView("home");
-        });
-    }
-
-    const loginForm = document.getElementById("loginForm");
-    if (loginForm) {
-        loginForm.addEventListener("submit", (e) => {
-            e.preventDefault();
-            const email = document.getElementById("loginEmail").value.trim();
-            const password = document.getElementById("loginPassword").value;
-            login(email, password);
-        });
-    }
-
-    const signupForm = document.getElementById("signupForm");
-    if (signupForm) {
-        signupForm.addEventListener("submit", (e) => {
-            e.preventDefault();
-            const username = document.getElementById("signupUsername").value.trim();
-            const email = document.getElementById("signupEmail").value.trim();
-            const password = document.getElementById("signupPassword").value;
-            signup(username, email, password);
-        });
-    }
-
-    const guestLoginBtn = document.getElementById("guestLoginBtn");
-    if (guestLoginBtn) {
-        guestLoginBtn.addEventListener("click", () => {
-            const guestUser = {
-                id: 0,
-                username: "Guest",
-                email: "guest@dev.local",
-                created_at: new Date().toISOString()
-            };
-            // We don't need a real token for guest mode
-            localStorage.removeItem(LS_KEY_TOKEN);
-            updateAuthUI(guestUser);
-            showView("home");
-            renderFeed(true);
-        });
-    }
-}
-
-// ---------- Upvotes ----------
-
-function loadUpvoted() {
-    return JSON.parse(localStorage.getItem(LS_KEY_UPVOTED) || "[]");
-}
-
-function saveUpvoted(list) {
-    localStorage.setItem(LS_KEY_UPVOTED, JSON.stringify(list));
-}
-
-function upvoteArtwork(id) {
-    const upvoted = loadUpvoted();
-
-    if (upvoted.includes(id)) {
-        return; // already upvoted, do nothing
-    }
-
-    upvoted.push(id);
-    saveUpvoted(upvoted);
-
-    const artworks = loadArtworks();
-    const art = artworks.find(a => a.id === id);
-    if (!art) return;
-
-    art.votes += 1;
-    saveArtworks(artworks);
-
-    // Refresh UI properly
-    renderFeed(true);
-
-    const currentView = document.querySelector("#view-detail.view.active");
-    if (currentView) openDetail(id);
-
-    renderProfile();
-}
-
-// ---------- Followers (helpers + actions) ----------
-
-function loadFollowersMap() {
-    return JSON.parse(localStorage.getItem(LS_KEY_FOLLOWERS) || "{}");
-}
-
-function saveFollowersMap(map) {
-    localStorage.setItem(LS_KEY_FOLLOWERS, JSON.stringify(map));
-}
-
-function getFollowersFor(username) {
-    const map = loadFollowersMap();
-    return map[username] ? Array.from(new Set(map[username])) : [];
-}
-
-function setFollowersFor(username, followersArray) {
-    const map = loadFollowersMap();
-    map[username] = Array.from(new Set(followersArray));
-    saveFollowersMap(map);
-}
-
-function getFollowingFor(username) {
-    const map = loadFollowersMap();
-    return Object.keys(map).filter(user => (map[user] || []).includes(username));
-}
-
-function isFollowing(targetUsername) {
-    if (!currentUser) return false;
-    const followers = getFollowersFor(targetUsername);
-    return followers.includes(currentUser.username);
-}
-
-function followUser(targetUsername) {
-    if (!currentUser) {
-        alert("You must be logged in to follow users.");
-        showView("login");
-        return;
-    }
-    if (currentUser.username === targetUsername) return;
-
-    const followers = getFollowersFor(targetUsername);
-    if (!followers.includes(currentUser.username)) {
-        followers.push(currentUser.username);
-        setFollowersFor(targetUsername, followers);
-    }
-
-    // Refresh UI
-    renderFeed(true);
-    renderProfile();
-    if (currentDetailId) openDetail(currentDetailId);
-}
-
-function unfollowUser(targetUsername) {
-    if (!currentUser) {
-        alert("You must be logged in to unfollow users.");
-        showView("login");
-        return;
-    }
-    if (currentUser.username === targetUsername) return;
-
-    let followers = getFollowersFor(targetUsername);
-    followers = followers.filter(u => u !== currentUser.username);
-    setFollowersFor(targetUsername, followers);
-
-    renderFeed(true);
-    renderProfile();
-    if (currentDetailId) openDetail(currentDetailId);
-}
-
-// ---------- Detail Page ----------
-
-function openDetail(id) {
-    const art = getArtworkById(id);
-    if (!art) return;
-
-    // set current detail id so follow/unfollow can refresh this view
-    currentDetailId = id;
-
-    const container = document.getElementById("detailContainer");
-    container.innerHTML = `
-        <div class="detail-image">
-            <img src="${art.imageUrl}" alt="${art.title}">
-        </div>
-        <div class="detail-meta">
-            <h2>${art.title}</h2>
-            <div class="artist-row">
-                <p class="artist">by ${art.artist}</p>
-                <button class="follow-btn" id="detailFollowBtn">Follow</button>
-            </div>
-            <p>${art.description}</p>
-            <p class="tags">#human-made #${art.title.replace(/\s+/g, '').toLowerCase()}</p>
-            <div class="detail-upvote-row">
-                <button class="upvote-btn" id="detailUpvoteBtn">▲ Upvote</button>
-                <span class="votes" id="detailVotes">${art.votes} votes</span>
-            </div>
-
-            <div class="comments">
-                <h3>Comments</h3>
-                <div id="commentsList"></div>
-                <form id="commentForm">
-                    <label>
-                        Add a comment
-                        <textarea id="commentText" rows="3" required></textarea>
-                    </label>
-                    <button type="submit">Post Comment</button>
-                </form>
-            </div>
-        </div>
-    `;
-
-    // Comments
-    const commentsList = container.querySelector("#commentsList");
-    commentsList.innerHTML = "";
-    art.comments.forEach(c => {
-        const div = document.createElement("div");
-        div.className = "comment";
-        div.innerHTML = `<strong>${c.author}</strong> ${c.text}`;
-        commentsList.appendChild(div);
-    });
-
-    // Detail upvote button
-    const detailUpvoteBtn = container.querySelector("#detailUpvoteBtn");
-    const upvoted = loadUpvoted();
-
-    if (detailUpvoteBtn) {
-        if (upvoted.includes(art.id)) {
-            detailUpvoteBtn.classList.add("disabled");
-            detailUpvoteBtn.textContent = "Upvoted";
-            detailUpvoteBtn.disabled = true;
-        } else {
-            detailUpvoteBtn.addEventListener("click", () => {
-                upvoteArtwork(art.id);
-            });
-        }
-    }
-
-    // Detail follow button wiring
-    const detailFollowBtn = container.querySelector("#detailFollowBtn");
-    if (detailFollowBtn) {
-        if (!currentUser || currentUser.username === art.owner) {
-            detailFollowBtn.classList.add("disabled");
-            detailFollowBtn.textContent = "You";
-            detailFollowBtn.disabled = true;
-        } else {
-            if (isFollowing(art.owner)) {
-                detailFollowBtn.classList.add("following");
-                detailFollowBtn.textContent = "Following";
-            } else {
-                detailFollowBtn.classList.remove("following");
-                detailFollowBtn.textContent = "Follow";
-            }
-
-            detailFollowBtn.addEventListener("click", () => {
-                if (isFollowing(art.owner)) {
-                    unfollowUser(art.owner);
-                    detailFollowBtn.classList.remove("following");
-                    detailFollowBtn.textContent = "Follow";
-                } else {
-                    followUser(art.owner);
-                    detailFollowBtn.classList.add("following");
-                    detailFollowBtn.textContent = "Following";
-                }
-            });
-        }
-    }
-
-    // Comment form
-    const commentForm = container.querySelector("#commentForm");
-    if (commentForm) {
-        commentForm.addEventListener("submit", (e) => {
-            e.preventDefault();
-            if (!currentUser) {
-                alert("You must be logged in to comment.");
-                showView("login");
-                return;
-            }
-
-            const text = container.querySelector("#commentText").value.trim();
-            if (!text) return;
-
-            const artworks = loadArtworks();
-            const target = artworks.find(a => a.id === art.id);
-            if (!target) return;
-            target.comments.push({
-                author: `@${currentUser.username}`,
-                text
-            });
-            saveArtworks(artworks);
-            openDetail(art.id);
-        });
-    }
-
-    showView("detail");
-}
-
-// ---------- Profile Page ----------
-
-function renderProfile() {
+async function renderProfile() {
     if (!currentUser) return;
 
     const grid = document.getElementById("profileGrid");
@@ -622,85 +204,393 @@ function renderProfile() {
     if (!grid || !totalUpvotesEl) return;
 
     grid.innerHTML = "";
+    await updateProfileStatsUI();
 
-    // Update profile header
-    const profileHeader = document.querySelector("#view-profile .profile-header");
-    if (profileHeader) {
-        profileHeader.querySelector(".avatar").textContent = currentUser.username.substring(0, 2).toUpperCase();
-        profileHeader.querySelector("h3").textContent = `@${currentUser.username}`;
-        // Followers block
-        const followers = getFollowersFor(currentUser.username);
-        let followersContainer = profileHeader.querySelector(".followers-container");
-        if (!followersContainer) {
-            followersContainer = document.createElement("div");
-            followersContainer.className = "followers-container";
-            profileHeader.appendChild(followersContainer);
-        }
-        followersContainer.innerHTML = `
-            <p class="followers-count"><strong>Followers:</strong> ${followers.length}</p>
-            <div class="followers-list">
-                ${followers.length ? followers.map(u => `<div class="follower-item">@${u}</div>`).join("") : `<p class="muted">No followers yet</p>`}
-            </div>
-            <p class="following-count"><strong>Following:</strong> ${getFollowingFor(currentUser.username).length}</p>
-        `;
-    }
-
-    const artworks = loadArtworks().filter(a => a.owner === currentUser.username);
+    const artworks = await loadArtworks();
+    const myArtworks = artworks.filter(a => a.user_id === currentUser.id);
     let totalVotes = 0;
 
-    artworks.forEach(art => {
-        totalVotes += art.votes;
+    myArtworks.forEach(art => {
+        totalVotes += (art.votes || 0);
         const card = document.createElement("div");
-        card.className = "card";
+        card.className = "card card-profile";
+        card.dataset.id = art.id;
+        const fullImageUrl = art.image_url.startsWith("/") ? `http://localhost:5000${art.image_url}` : art.image_url;
         card.innerHTML = `
-            <img src="${art.imageUrl}" alt="${art.title}">
+            <img src="${fullImageUrl}" alt="${art.title}">
+            <div class="overlay-actions">
+                <div class="bottom-actions">
+                    <button type="button" class="upvote-btn action-upvote" data-id="${art.id}">▲</button>
+                    <span class="votes-count" style="color: white; text-shadow: 0 1px 4px rgba(0,0,0,0.8); font-weight: bold;">${art.votes || 0}</span>
+                </div>
+            </div>
             <h3>${art.title}</h3>
-            <p class="artist">${art.votes} votes</p>
+            <p class="artist">${art.votes || 0} votes</p>
         `;
-        card.addEventListener("click", () => openDetail(art.id));
+        updateCardUI(card, art);
         grid.appendChild(card);
     });
 
     totalUpvotesEl.textContent = totalVotes;
 }
 
-// ---------- Init ----------
+async function openDetail(id) {
+    const token = localStorage.getItem(LS_KEY_TOKEN);
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
 
-document.addEventListener("DOMContentLoaded", () => {
-    fetchCurrentUser();
-    setupNav();
+    try {
+        const response = await fetch(`${API_URL}/artworks/${id}`, { headers });
+        if (!response.ok) throw new Error("Artwork not found");
+        const art = await response.json();
+
+        currentDetailId = id;
+        const container = document.getElementById("detailContainer");
+        const fullImageUrl = art.image_url.startsWith("/") ? `http://localhost:5000${art.image_url}` : art.image_url;
+
+        container.innerHTML = `
+            <div class="detail-image">
+                <img src="${fullImageUrl}" alt="${art.title}">
+            </div>
+            <div class="detail-meta">
+                <h2>${art.title}</h2>
+                <div class="artist-row">
+                    <p class="artist">by ${art.artist}</p>
+                    <button type="button" class="follow-btn action-follow" data-artist-id="${art.user_id}">Follow</button>
+                </div>
+                <p>${art.description || "No description provided."}</p>
+                <div class="detail-upvote-row-visible">
+                    <button type="button" class="upvote-btn action-upvote" id="detailUpvoteBtn" data-id="${art.id}">▲ Upvote</button>
+                    <span class="votes" id="detailVotes">${art.votes || 0} votes</span>
+                </div>
+                <div class="comments">
+                    <h3>Comments</h3>
+                    <div id="commentsList"><p class="muted">Comments are coming soon!</p></div>
+                </div>
+            </div>
+        `;
+
+        updateDetailUI(art);
+        showView("detail");
+    } catch (error) {
+        console.error("Detail load error:", error);
+    }
+}
+
+// ---------- Surgical UI Helpers ----------
+
+function updateCardUI(card, art) {
+    const upvoteBtn = card.querySelector(".upvote-btn");
+    const votesCount = card.querySelector(".votes-count");
+    const followBtn = card.querySelector(".mini-follow-btn");
+
+    if (upvoteBtn && votesCount) {
+        if (art.is_upvoted) {
+            upvoteBtn.classList.add("upvoted");
+            upvoteBtn.textContent = "✓";
+        } else {
+            upvoteBtn.classList.remove("upvoted");
+            upvoteBtn.textContent = "▲";
+        }
+        votesCount.textContent = art.votes || 0;
+    }
+
+    if (followBtn) {
+        if (!currentUser || currentUser.id === art.user_id) {
+            followBtn.style.display = "none";
+        } else {
+            followBtn.style.display = "block";
+            if (isFollowing(art.user_id)) {
+                followBtn.classList.add("following");
+                followBtn.textContent = "Following";
+            } else {
+                followBtn.classList.remove("following");
+                followBtn.textContent = "Follow";
+            }
+        }
+    }
+}
+
+function updateDetailUI(art) {
+    const upvoteBtn = document.getElementById("detailUpvoteBtn");
+    const votesText = document.getElementById("detailVotes");
+    const followBtn = document.querySelector("#view-detail .follow-btn");
+
+    if (upvoteBtn) {
+        if (art.is_upvoted) {
+            upvoteBtn.classList.add("upvoted-active");
+            upvoteBtn.textContent = "✓ Upvoted";
+        } else {
+            upvoteBtn.classList.remove("upvoted-active");
+            upvoteBtn.textContent = "▲ Upvote";
+        }
+    }
+    if (votesText) votesText.textContent = `${art.votes || 0} votes`;
+
+    if (followBtn) {
+        if (!currentUser || currentUser.id === art.user_id) {
+            followBtn.style.display = "none";
+        } else {
+            followBtn.style.display = "inline-block";
+            if (isFollowing(art.user_id)) {
+                followBtn.classList.add("following");
+                followBtn.textContent = "Following";
+            } else {
+                followBtn.classList.remove("following");
+                followBtn.textContent = "Follow";
+            }
+        }
+    }
+}
+
+async function updateProfileStatsUI() {
+    if (!currentUser) return;
+    
+    const usernameEl = document.getElementById("profileUsername");
+    const avatarEl = document.querySelector("#view-profile .avatar");
+    const followersEl = document.getElementById("profileFollowersCount");
+    const followingEl = document.getElementById("profileFollowingCount");
+
+    if (usernameEl) usernameEl.textContent = `@${currentUser.username}`;
+    if (avatarEl) avatarEl.textContent = currentUser.username.substring(0, 2).toUpperCase();
+    if (followersEl) followersEl.textContent = currentUser.followers_count || 0;
+    if (followingEl) followingEl.textContent = currentUser.following_count || 0;
+}
+
+async function updateSurgical(artworkId) {
+    const token = localStorage.getItem(LS_KEY_TOKEN);
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    try {
+        const response = await fetch(`${API_URL}/artworks/${artworkId}`, { headers });
+        if (response.ok) {
+            const art = await response.json();
+            
+            // 1. Update all matching cards
+            const cards = document.querySelectorAll(`.card[data-id="${artworkId}"]`);
+            cards.forEach(card => updateCardUI(card, art));
+
+            // 2. Update detail view
+            if (getActiveView() === "detail" && currentDetailId == artworkId) {
+                updateDetailUI(art);
+            }
+            
+            // 3. Update profile totals if needed (optional optimization)
+        }
+    } catch (e) { console.error("Surgical update failed", e); }
+}
+
+// ---------- Social Actions ----------
+
+async function upvoteArtwork(id, isCurrentlyUpvoted) {
+    const token = localStorage.getItem(LS_KEY_TOKEN);
+    if (!token) { alert("Please log in to upvote."); showView("login"); return; }
+
+    try {
+        const response = await fetch(`${API_URL}/artworks/${id}/upvote`, {
+            method: isCurrentlyUpvoted ? "DELETE" : "POST",
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (response.ok) {
+            await updateSurgical(id);
+        }
+    } catch (error) { console.error("Upvote error:", error); }
+}
+
+async function handleFollowAction(targetUserId) {
+    const token = localStorage.getItem(LS_KEY_TOKEN);
+    if (!token) { alert("Please log in to follow."); showView("login"); return; }
+
+    const currentlyFollowing = isFollowing(targetUserId);
+    const method = currentlyFollowing ? "POST" : "POST"; // Backend uses specific paths
+    const path = currentlyFollowing ? "unfollow" : "follow";
+
+    try {
+        const response = await fetch(`${API_URL}/users/${targetUserId}/${path}`, {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+            await fetchFollowingList();
+            await fetchCurrentUser(); // Get new counts
+            
+            // Refresh visible elements
+            const artistCards = document.querySelectorAll(`.mini-follow-btn[data-artist-id="${targetUserId}"]`);
+            for (const btn of artistCards) {
+                const card = btn.closest(".card");
+                if (card) await updateSurgical(card.dataset.id);
+            }
+            if (getActiveView() === "detail" && currentDetailId) await updateSurgical(currentDetailId);
+            if (getActiveView() === "profile") await updateProfileStatsUI();
+        }
+    } catch (error) { console.error("Follow error:", error); }
+}
+
+function isFollowing(targetUserId) {
+    return followingList.includes(parseInt(targetUserId));
+}
+
+// ---------- Data Loading ----------
+
+async function loadArtworks() {
+    const token = localStorage.getItem(LS_KEY_TOKEN);
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    try {
+        const response = await fetch(`${API_URL}/artworks`, { headers });
+        return response.ok ? await response.json() : [];
+    } catch (e) { return []; }
+}
+
+// ---------- Initialization ----------
+
+document.addEventListener("DOMContentLoaded", async () => {
+    await fetchCurrentUser();
     setupForms();
-    renderFeed(true);
 
+    // Restore View
+    const savedView = localStorage.getItem(LS_KEY_VIEW) || "home";
+    if (savedView === "home") await renderFeed(true);
+    if (savedView === "profile") await renderProfile();
+    showView(savedView);
+
+    // MASTER DELEGATOR
+    document.addEventListener("click", async (e) => {
+        const target = e.target;
+
+        // 1. Navigation / View Switches
+        const viewLink = target.closest("[data-view]");
+        if (viewLink) {
+            e.preventDefault();
+            const view = viewLink.getAttribute("data-view");
+            if (view === "home") await renderFeed(true);
+            if (view === "profile") await renderProfile();
+            showView(view);
+            return;
+        }
+
+        // 2. Upvote
+        const upvoteBtn = target.closest(".action-upvote");
+        if (upvoteBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            const id = upvoteBtn.getAttribute("data-id");
+            const isUpvoted = upvoteBtn.classList.contains("upvoted") || upvoteBtn.classList.contains("upvoted-active");
+            await upvoteArtwork(id, isUpvoted);
+            return;
+        }
+
+        // 3. Follow
+        const followBtn = target.closest(".action-follow");
+        if (followBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            const artistId = followBtn.getAttribute("data-artist-id");
+            await handleFollowAction(artistId);
+            return;
+        }
+
+        // 4. Card click (Detail)
+        const card = target.closest(".card");
+        if (card && !target.closest("button")) {
+            e.preventDefault();
+            await openDetail(card.dataset.id);
+            return;
+        }
+
+        // 5. Logout
+        if (target.id === "logoutBtn" || target.closest("#logoutBtn")) {
+            e.preventDefault();
+            logout();
+        }
+
+        // 6. Guest Login
+        if (target.id === "guestLoginBtn") {
+            e.preventDefault();
+            const guestUser = { id: 0, username: "Guest", email: "guest@dev.local", created_at: new Date().toISOString() };
+            localStorage.removeItem(LS_KEY_TOKEN);
+            updateAuthUI(guestUser);
+            showView("home");
+            await renderFeed(true);
+        }
+    });
+
+    // Dark Mode
     const darkToggle = document.getElementById("darkModeToggle");
     if (darkToggle) {
-        darkToggle.addEventListener("click", () => {
+        darkToggle.addEventListener("click", (e) => {
+            e.preventDefault();
             document.body.classList.toggle("dark");
             localStorage.setItem("darkMode", document.body.classList.contains("dark"));
         });
     }
+    if (localStorage.getItem("darkMode") === "true") document.body.classList.add("dark");
 
-    if (localStorage.getItem("darkMode") === "true") {
-        document.body.classList.add("dark");
-    }
-    window.addEventListener("scroll", () => {
-        if (isLoadingMore) return;
-
+    // Infinite Scroll
+    window.addEventListener("scroll", async () => {
+        if (isLoadingMore || getActiveView() !== "home") return;
         const scrollPos = window.innerHeight + window.scrollY;
-        const bottom = document.body.offsetHeight - 300;
-
-        if (scrollPos >= bottom) {
+        if (scrollPos >= document.body.offsetHeight - 300) {
             isLoadingMore = true;
-            renderFeed();
+            await renderFeed();
         }
     });
 });
 
-function showLoading() {
-    const el = document.getElementById("loadingOverlay");
-    if (el) el.style.display = "flex";
+function setupForms() {
+    const uploadForm = document.getElementById("uploadForm");
+    if (uploadForm) {
+        uploadForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const title = document.getElementById("artTitle").value;
+            const description = document.getElementById("artDescription").value;
+            const file = document.getElementById("artImageFile").files[0];
+            const token = localStorage.getItem(LS_KEY_TOKEN);
+
+            const formData = new FormData();
+            formData.append("title", title);
+            formData.append("description", description);
+            formData.append("image", file);
+
+            showLoading();
+            const response = await fetch(`${API_URL}/artworks`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${token}` },
+                body: formData
+            });
+            hideLoading();
+            if (response.ok) {
+                uploadForm.reset();
+                showView("home");
+                await renderFeed(true);
+            }
+        });
+    }
+    const loginForm = document.getElementById("loginForm");
+    if (loginForm) {
+        loginForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+            login(document.getElementById("loginEmail").value, document.getElementById("loginPassword").value);
+        });
+    }
+    const signupForm = document.getElementById("signupForm");
+    if (signupForm) {
+        signupForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+            signup(document.getElementById("signupUsername").value, document.getElementById("signupEmail").value, document.getElementById("signupPassword").value);
+        });
+    }
+    const fileInput = document.getElementById("artImageFile");
+    const preview = document.getElementById("uploadPreview");
+    if (fileInput && preview) {
+        fileInput.addEventListener("change", () => {
+            const file = fileInput.files[0];
+            if (file) { preview.src = URL.createObjectURL(file); preview.style.display = "block"; }
+        });
+    }
 }
-function hideLoading() {
-    const el = document.getElementById("loadingOverlay");
-    if (el) el.style.display = "none";
-}
+
+function showLoading() { const el = document.getElementById("loadingOverlay"); if (el) el.style.display = "flex"; }
+function hideLoading() { const el = document.getElementById("loadingOverlay"); if (el) el.style.display = "none"; }

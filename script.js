@@ -24,7 +24,7 @@ async function fetchCurrentUser() {
         const token = localStorage.getItem(LS_KEY_TOKEN);
         if (!token) { updateAuthUI(null); return; }
 
-        const response = await fetch(`${API_URL}/auth/me`, {
+        const response = await fetch(`${API_URL}/auth/me?t=${Date.now()}`, {
             headers: { "Authorization": `Bearer ${token}` }
         });
 
@@ -47,7 +47,7 @@ async function fetchFollowingList() {
         const token = localStorage.getItem(LS_KEY_TOKEN);
         if (!token) { followingList = []; return; }
 
-        const response = await fetch(`${API_URL}/users/following`, {
+        const response = await fetch(`${API_URL}/users/following?t=${Date.now()}`, {
             headers: { "Authorization": `Bearer ${token}` }
         });
         if (response.ok) {
@@ -256,7 +256,7 @@ async function openDetail(id) {
         const headers = {};
         if (token) headers["Authorization"] = `Bearer ${token}`;
 
-        const response = await fetch(`${API_URL}/artworks/${id}`, { headers });
+        const response = await fetch(`${API_URL}/artworks/${id}?t=${Date.now()}`, { headers });
         if (!response.ok) throw new Error("Artwork not found");
         const art = await response.json();
 
@@ -390,7 +390,7 @@ async function updateProfileStatsUI() {
 
         if (avatarEl) {
             if (currentUser.profile_pic_url) {
-                avatarEl.innerHTML = `<img src="${BASE_URL}${currentUser.profile_pic_url}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`;
+                avatarEl.innerHTML = `<img src="${BASE_URL}${currentUser.profile_pic_url}?t=${Date.now()}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`;
             } else {
                 avatarEl.textContent = currentUser.username.substring(0, 2).toUpperCase();
             }
@@ -404,7 +404,7 @@ async function updateSurgical(artworkId) {
         const headers = {};
         if (token) headers["Authorization"] = `Bearer ${token}`;
 
-        const response = await fetch(`${API_URL}/artworks/${artworkId}`, { headers });
+        const response = await fetch(`${API_URL}/artworks/${artworkId}?t=${Date.now()}`, { headers });
         if (response.ok) {
             const art = await response.json();
             const cards = document.querySelectorAll(`.card[data-id="${artworkId}"]`);
@@ -465,7 +465,7 @@ async function loadComments(artworkId) {
     if (!list) return;
     list.innerHTML = "<p class='muted'>Loading comments...</p>";
     try {
-        const response = await fetch(`${API_URL}/artworks/${artworkId}/comments`);
+        const response = await fetch(`${API_URL}/artworks/${artworkId}/comments?t=${Date.now()}`);
         if (response.ok) {
             const comments = await response.json();
             list.innerHTML = comments.length === 0 ? "<p class='muted'>No comments yet.</p>" : "";
@@ -544,7 +544,8 @@ async function loadArtworks() {
         const token = localStorage.getItem(LS_KEY_TOKEN);
         const headers = {};
         if (token) headers["Authorization"] = `Bearer ${token}`;
-        const response = await fetch(`${API_URL}/artworks`, { headers });
+        // Add cache buster to ensure we get the latest data from the DB
+        const response = await fetch(`${API_URL}/artworks?t=${Date.now()}`, { headers });
         return response.ok ? await response.json() : [];
     } catch (e) { return []; }
 }
@@ -709,6 +710,8 @@ function setupForms() {
             hideLoading();
             if (response.ok) {
                 uploadForm.reset();
+                const preview = document.getElementById("uploadPreview");
+                if (preview) preview.style.display = "none";
                 showView("home");
                 await renderFeed(true);
             }
@@ -739,6 +742,12 @@ function setupForms() {
             if (response.ok) {
                 const data = await response.json();
                 updateAuthUI(data.user);
+                
+                // Cleanup form
+                editProfileForm.reset();
+                const preview = document.getElementById("editProfilePicPreview");
+                if (preview) preview.style.display = "none";
+
                 showView("profile");
                 await renderProfile();
             } else {

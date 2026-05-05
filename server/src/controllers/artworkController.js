@@ -1,32 +1,5 @@
-const multer = require("multer");
-const path = require("path");
+const upload = require("../utils/multerConfig").single("image");
 const { getDB } = require("../config/db");
-
-// Configure Multer for storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, "../uploads"));
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  },
-});
-
-const upload = multer({
-  storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|webp/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-    if (extname && mimetype) {
-      return cb(null, true);
-    } else {
-      cb(new Error("Only images are allowed (jpeg, jpg, png, webp)"));
-    }
-  },
-}).single("image");
 
 const uploadArtwork = async (req, res) => {
   upload(req, res, async (err) => {
@@ -97,7 +70,7 @@ const getArtworkById = async (req, res) => {
   try {
     const db = getDB();
     const artwork = await db.get(`
-      SELECT a.*, u.username as artist,
+      SELECT a.*, u.username as artist, u.profile_pic_url as artist_pic, u.bio as artist_bio,
       (SELECT COUNT(*) FROM artwork_votes WHERE artwork_id = a.id) as votes,
       CASE WHEN ? IS NOT NULL THEN (SELECT 1 FROM artwork_votes WHERE artwork_id = a.id AND user_id = ?) ELSE 0 END as is_upvoted
       FROM artworks a
@@ -186,10 +159,94 @@ const removeUpvoteArtwork = async (req, res) => {
   }
 };
 
+const deleteArtwork = async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const db = getDB();
+    
+    // Check if user owns the artwork
+    const artwork = await db.get("SELECT user_id FROM artworks WHERE id = ?", [id]);
+    if (!artwork) {
+      return res.status(404).json({ message: "Artwork not found" });
+    }
+    if (artwork.user_id !== userId) {
+      return res.status(403).json({ message: "You are not authorized to delete this artwork" });
+    }
+
+    // Delete artwork (votes and comments should be handled by ON DELETE CASCADE if enabled, 
+    // or manually deleted here for safety in SQLite)
+    await db.run("DELETE FROM artwork_votes WHERE artwork_id = ?", [id]);
+    await db.run("DELETE FROM comments WHERE artwork_id = ?", [id]);
+    await db.run("DELETE FROM artworks WHERE id = ?", [id]);
+
+    res.json({ message: "Artwork deleted successfully" });
+  } catch (error) {
+    console.error("Database error during deletion:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+const addComment = async (req, res) => {
+  const { id } = req.params;
+  const { text } = req.body;
+  const userId = req.user.id;
+
+  if (!text) {
+    return res.status(400).json({ message: "Comment text is required" });
+  }
+
+  try {
+    const db = getDB();
+    const result = await db.run(
+      "INSERT INTO comments (text, user_id, artwork_id) VALUES (?, ?, ?)",
+      [text, userId, id]
+    );
+
+    // Fetch the new comment with user details
+    const newComment = await db.get(`
+      SELECT c.*, u.username as author, u.profile_pic_url as author_pic
+      FROM comments c
+      JOIN users u ON c.user_id = u.id
+      WHERE c.id = ?
+    `, [result.lastID]);
+
+    res.status(201).json({
+      message: "Comment added successfully",
+      comment: newComment
+    });
+  } catch (error) {
+    console.error("Database error during comment addition:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+const getComments = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const db = getDB();
+    const comments = await db.all(`
+      SELECT c.*, u.username as author, u.profile_pic_url as author_pic
+      FROM comments c
+      JOIN users u ON c.user_id = u.id
+      WHERE c.artwork_id = ?
+      ORDER BY c.created_at ASC
+    `, [id]);
+    res.json(comments);
+  } catch (error) {
+    console.error("Database error fetching comments:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 module.exports = {
   uploadArtwork,
   getArtworks,
   getArtworkById,
   upvoteArtwork,
   removeUpvoteArtwork,
+  deleteArtwork,
+  addComment,
+  getComments,
 };

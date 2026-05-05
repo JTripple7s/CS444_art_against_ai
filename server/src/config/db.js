@@ -21,9 +21,19 @@ async function initDB() {
       username TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
+      profile_pic_url TEXT,
+      bio TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Add new columns if they don't exist
+  try {
+    await db.exec("ALTER TABLE users ADD COLUMN profile_pic_url TEXT");
+  } catch (e) {}
+  try {
+    await db.exec("ALTER TABLE users ADD COLUMN bio TEXT");
+  } catch (e) {}
 
   await db.exec(`
     CREATE TABLE IF NOT EXISTS artworks (
@@ -65,6 +75,18 @@ async function initDB() {
       PRIMARY KEY (user_id, artwork_id),
       FOREIGN KEY (user_id) REFERENCES users (id),
       FOREIGN KEY (artwork_id) REFERENCES artworks (id)
+    )
+  `);
+
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      text TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
+      artwork_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users (id),
+      FOREIGN KEY (artwork_id) REFERENCES artworks (id) ON DELETE CASCADE
     )
   `);
 

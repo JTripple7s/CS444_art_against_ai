@@ -158,12 +158,9 @@ async function renderFeed(reset = false) {
         }
 
         const artworks = await loadArtworks();
-        
-        // Show all artworks if resetting, otherwise paginate
         const pageItems = reset ? artworks : artworks.slice((feedPage - 1) * FEED_PAGE_SIZE, feedPage * FEED_PAGE_SIZE);
 
         pageItems.forEach(art => {
-            // Check if card already exists to avoid duplicates
             if (grid.querySelector(`.card[data-id="${art.id}"]`)) return;
 
             const card = document.createElement("div");
@@ -176,7 +173,10 @@ async function renderFeed(reset = false) {
                 <img src="${fullImageUrl}" alt="${art.title}">
                 <div class="overlay-actions">
                     <div class="top-actions">
-                        <button type="button" class="mini-follow-btn action-follow" data-artist-id="${art.user_id}">Follow</button>
+                        ${(currentUser && parseInt(currentUser.id) === parseInt(art.user_id)) ? 
+                            `<button type="button" class="action-delete" data-id="${art.id}">🗑</button>` : 
+                            `<button type="button" class="mini-follow-btn action-follow" data-artist-id="${art.user_id}">Follow</button>`
+                        }
                     </div>
                     <div class="bottom-actions">
                         <button type="button" class="upvote-btn action-upvote" data-id="${art.id}">▲</button>
@@ -225,6 +225,9 @@ async function renderProfile() {
             card.innerHTML = `
                 <img src="${fullImageUrl}" alt="${art.title}">
                 <div class="overlay-actions">
+                    <div class="top-actions">
+                        <button type="button" class="action-delete" data-id="${art.id}">🗑</button>
+                    </div>
                     <div class="bottom-actions">
                         <button type="button" class="upvote-btn action-upvote" data-id="${art.id}">▲</button>
                         <span class="votes-count" style="color: white; text-shadow: 0 1px 4px rgba(0,0,0,0.8); font-weight: bold;">${art.votes || 0}</span>
@@ -260,6 +263,7 @@ async function openDetail(id) {
 
         const container = document.getElementById("detailContainer");
         const fullImageUrl = art.image_url.startsWith("/") ? `http://localhost:5000${art.image_url}` : art.image_url;
+        const artistPic = art.artist_pic ? `http://localhost:5000${art.artist_pic}` : null;
 
         container.innerHTML = `
             <div class="detail-image">
@@ -268,9 +272,14 @@ async function openDetail(id) {
             <div class="detail-meta">
                 <h2>${art.title}</h2>
                 <div class="artist-row">
+                    ${artistPic ? `<img src="${artistPic}" class="artist-pic-small">` : `<div class="avatar-small">${art.artist.substring(0, 2).toUpperCase()}</div>`}
                     <p class="artist">by ${art.artist}</p>
                     <button type="button" class="follow-btn action-follow" data-artist-id="${art.user_id}">Follow</button>
+                    ${(currentUser && parseInt(currentUser.id) === parseInt(art.user_id)) ? 
+                        `<button type="button" class="delete-btn-detail action-delete" data-id="${art.id}">Delete Post</button>` : ''
+                    }
                 </div>
+                <p class="artist-bio-small">${art.artist_bio || ""}</p>
                 <p>${art.description || "No description provided."}</p>
                 <div class="detail-upvote-row-visible">
                     <button type="button" class="upvote-btn action-upvote" id="detailUpvoteBtn" data-id="${art.id}">▲ Upvote</button>
@@ -278,19 +287,24 @@ async function openDetail(id) {
                 </div>
                 <div class="comments">
                     <h3>Comments</h3>
-                    <div id="commentsList"><p class="muted">Comments are coming soon!</p></div>
+                    <div id="commentsList"></div>
+                    <form id="commentForm">
+                        <textarea id="commentText" placeholder="Add a comment..." required></textarea>
+                        <button type="submit">Post</button>
+                    </form>
                 </div>
             </div>
         `;
 
         updateDetailUI(art);
+        await loadComments(id);
         showView("detail");
     } catch (error) {
         console.error("openDetail error:", error);
     }
 }
 
-// ---------- UI Synchronization ----------
+// ---------- Surgical UI Helpers ----------
 
 function updateCardUI(card, art) {
     if (!card || !art) return;
@@ -364,9 +378,21 @@ async function updateProfileStatsUI() {
         const usernameEl = document.getElementById("profileUsername");
         const followersEl = document.getElementById("profileFollowersCount");
         const followingEl = document.getElementById("profileFollowingCount");
+        const bioEl = document.getElementById("profileBio");
+        const avatarEl = document.getElementById("profileAvatar");
+
         if (usernameEl) usernameEl.textContent = `@${currentUser.username}`;
         if (followersEl) followersEl.textContent = currentUser.followers_count || 0;
         if (followingEl) followingEl.textContent = currentUser.following_count || 0;
+        if (bioEl) bioEl.textContent = currentUser.bio || "No bio yet.";
+
+        if (avatarEl) {
+            if (currentUser.profile_pic_url) {
+                avatarEl.innerHTML = `<img src="http://localhost:5000${currentUser.profile_pic_url}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`;
+            } else {
+                avatarEl.textContent = currentUser.username.substring(0, 2).toUpperCase();
+            }
+        }
     } catch (e) {}
 }
 
@@ -389,6 +415,84 @@ async function updateSurgical(artworkId) {
 }
 
 // ---------- Social Actions ----------
+
+async function deleteArtwork(id) {
+    if (!confirm("Are you sure you want to delete this artwork? This cannot be undone.")) return;
+    const token = localStorage.getItem(LS_KEY_TOKEN);
+    try {
+        const response = await fetch(`${API_URL}/artworks/${id}`, {
+            method: "DELETE",
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (response.ok) {
+            if (getActiveView() === "detail" && parseInt(currentDetailId) === parseInt(id)) {
+                localStorage.removeItem(LS_KEY_DETAIL_ID);
+                showView("home");
+                await renderFeed(true);
+            } else {
+                document.querySelectorAll(`.card[data-id="${id}"]`).forEach(c => c.remove());
+                if (getActiveView() === "profile") await renderProfile();
+            }
+        }
+    } catch (e) { console.error("Delete error:", e); }
+}
+
+async function postComment(artworkId, text) {
+    const token = localStorage.getItem(LS_KEY_TOKEN);
+    if (!token) { alert("Please log in to comment."); showView("login"); return; }
+    try {
+        const response = await fetch(`${API_URL}/artworks/${artworkId}/comments`, {
+            method: "POST",
+            headers: { 
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ text })
+        });
+        if (response.ok) {
+            const data = await response.json();
+            renderSingleComment(data.comment);
+            const input = document.getElementById("commentText");
+            if (input) input.value = "";
+        }
+    } catch (e) { console.error("Comment error:", e); }
+}
+
+async function loadComments(artworkId) {
+    const list = document.getElementById("commentsList");
+    if (!list) return;
+    list.innerHTML = "<p class='muted'>Loading comments...</p>";
+    try {
+        const response = await fetch(`${API_URL}/artworks/${artworkId}/comments`);
+        if (response.ok) {
+            const comments = await response.json();
+            list.innerHTML = comments.length === 0 ? "<p class='muted'>No comments yet.</p>" : "";
+            comments.forEach(c => renderSingleComment(c));
+        }
+    } catch (e) { console.error("Load comments error:", e); }
+}
+
+function renderSingleComment(c) {
+    const list = document.getElementById("commentsList");
+    if (!list) return;
+    const placeholder = list.querySelector(".muted");
+    if (placeholder) placeholder.remove();
+    const div = document.createElement("div");
+    div.className = "comment-item";
+    const authorPic = c.author_pic ? `http://localhost:5000${c.author_pic}` : null;
+    div.innerHTML = `
+        <div class="comment-author-pic">
+            ${authorPic ? `<img src="${authorPic}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : c.author.substring(0,2).toUpperCase()}
+        </div>
+        <div class="comment-content">
+            <span class="comment-author-name">@${c.author}</span>
+            <p class="comment-text">${c.text}</p>
+            <span class="comment-date">${new Date(c.created_at).toLocaleDateString()}</span>
+        </div>
+    `;
+    list.appendChild(div);
+    list.scrollTop = list.scrollHeight;
+}
 
 async function upvoteArtwork(id, isCurrentlyUpvoted) {
     const token = localStorage.getItem(LS_KEY_TOKEN);
@@ -417,14 +521,10 @@ async function handleFollowAction(targetUserId) {
         if (response.ok) {
             await fetchFollowingList();
             await fetchCurrentUser();
-            // Surgical refresh for everything visible for this artist
             document.querySelectorAll(`[data-artist-id="${targetUserId}"]`).forEach(btn => {
                 const card = btn.closest(".card");
                 if (card) updateSurgical(card.dataset.id);
-                else {
-                    // It might be a button in the detail view
-                    if (getActiveView() === "detail" && currentDetailId) updateSurgical(currentDetailId);
-                }
+                else if (getActiveView() === "detail" && currentDetailId) updateSurgical(currentDetailId);
             });
             if (getActiveView() === "profile") await updateProfileStatsUI();
         }
@@ -468,10 +568,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     
     showView(savedView);
 
+    // CLICK DELEGATION
     document.addEventListener("click", async (e) => {
         const target = e.target;
 
-        // --- 1. Social Action: Upvote ---
+        // 1. Social: Upvote
         const upvoteBtn = target.closest(".action-upvote");
         if (upvoteBtn) {
             e.preventDefault();
@@ -482,7 +583,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             return;
         }
 
-        // --- 2. Social Action: Follow ---
+        // 2. Social: Follow
         const followBtn = target.closest(".action-follow");
         if (followBtn) {
             e.preventDefault();
@@ -492,19 +593,33 @@ document.addEventListener("DOMContentLoaded", async () => {
             return;
         }
 
-        // --- 3. Navigation: View Links ---
+        // 3. Social: Delete
+        const deleteBtn = target.closest(".action-delete");
+        if (deleteBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            const id = deleteBtn.getAttribute("data-id");
+            await deleteArtwork(id);
+            return;
+        }
+
+        // 4. Navigation: View Links
         const viewLink = target.closest("[data-view]");
         if (viewLink) {
             e.preventDefault();
             e.stopPropagation();
             const view = viewLink.getAttribute("data-view");
+            if (view === "edit-profile" && currentUser) {
+                const bioArea = document.getElementById("editProfileBio");
+                if (bioArea) bioArea.value = currentUser.bio || "";
+            }
             if (view === "home") await renderFeed(true);
             if (view === "profile") await renderProfile();
             showView(view);
             return;
         }
 
-        // --- 4. Navigation: Card Detail ---
+        // 5. Navigation: Card Detail
         const card = target.closest(".card");
         if (card && !target.closest("button")) {
             e.preventDefault();
@@ -513,13 +628,13 @@ document.addEventListener("DOMContentLoaded", async () => {
             return;
         }
 
-        // --- 5. Action: Logout ---
+        // 6. Action: Logout
         if (target.id === "logoutBtn" || target.closest("#logoutBtn")) {
             e.preventDefault();
             logout();
         }
 
-        // --- 6. Action: Guest Login ---
+        // 7. Action: Guest Login
         if (target.id === "guestLoginBtn") {
             e.preventDefault();
             const guestUser = { id: 0, username: "Guest", email: "guest@dev.local", created_at: new Date().toISOString() };
@@ -527,6 +642,20 @@ document.addEventListener("DOMContentLoaded", async () => {
             updateAuthUI(guestUser);
             showView("home");
             await renderFeed(true);
+        }
+    });
+
+    // SUBMIT DELEGATION
+    document.addEventListener("submit", async (e) => {
+        const target = e.target;
+
+        // Comment Posting
+        if (target.id === "commentForm") {
+            e.preventDefault();
+            const text = document.getElementById("commentText").value.trim();
+            if (text && currentDetailId) {
+                await postComment(currentDetailId, text);
+            }
         }
     });
 
@@ -581,6 +710,51 @@ function setupForms() {
             }
         });
     }
+
+    const editProfileForm = document.getElementById("editProfileForm");
+    if (editProfileForm) {
+        editProfileForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const bio = document.getElementById("editProfileBio").value;
+            const fileInput = document.getElementById("editProfilePicFile");
+            const file = fileInput.files[0];
+            const token = localStorage.getItem(LS_KEY_TOKEN);
+
+            const formData = new FormData();
+            formData.append("bio", bio);
+            if (file) formData.append("profilePic", file);
+
+            showLoading();
+            const response = await fetch(`${API_URL}/users/profile`, {
+                method: "PUT",
+                headers: { "Authorization": `Bearer ${token}` },
+                body: formData
+            });
+            hideLoading();
+
+            if (response.ok) {
+                const data = await response.json();
+                updateAuthUI(data.user);
+                showView("profile");
+                await renderProfile();
+            } else {
+                alert("Failed to update profile.");
+            }
+        });
+
+        const picInput = document.getElementById("editProfilePicFile");
+        const picPreview = document.getElementById("editProfilePicPreview");
+        if (picInput && picPreview) {
+            picInput.addEventListener("change", () => {
+                const file = picInput.files[0];
+                if (file) {
+                    picPreview.src = URL.createObjectURL(file);
+                    picPreview.style.display = "block";
+                }
+            });
+        }
+    }
+
     const loginForm = document.getElementById("loginForm");
     if (loginForm) {
         loginForm.addEventListener("submit", (e) => { e.preventDefault(); login(document.getElementById("loginEmail").value, document.getElementById("loginPassword").value); });

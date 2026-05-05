@@ -1,4 +1,34 @@
 const { getDB } = require("../config/db");
+const { updateUserProfile } = require("../services/userService");
+const upload = require("../utils/multerConfig").single("profilePic");
+
+const updateProfile = async (req, res) => {
+  upload(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({ message: err.message });
+    }
+
+    const { bio } = req.body;
+    const userId = req.user.id;
+
+    try {
+      let profilePicUrl = null;
+      if (req.file) {
+        profilePicUrl = `/uploads/${req.file.filename}`;
+      }
+
+      const updatedUser = await updateUserProfile(userId, { bio, profilePicUrl });
+
+      res.json({
+        message: "Profile updated successfully",
+        user: updatedUser,
+      });
+    } catch (error) {
+      console.error("Database error during profile update:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+};
 
 const followUser = async (req, res) => {
   const { id } = req.params; // ID of the user to follow
@@ -77,4 +107,5 @@ module.exports = {
   followUser,
   unfollowUser,
   getFollowing,
+  updateProfile,
 };

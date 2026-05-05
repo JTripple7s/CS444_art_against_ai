@@ -11,7 +11,7 @@ async function viewDB() {
       driver: sqlite3.Database
     });
 
-    const users = await db.all("SELECT id, username, email, created_at FROM users");
+    const users = await db.all("SELECT * FROM users");
     console.log("\n--- Users ---");
     console.table(users);
 

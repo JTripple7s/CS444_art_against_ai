@@ -108,9 +108,12 @@
 
         <!-- Profile page -->
         <section id="view-profile" class="view">
-            <h2>Your Profile</h2>
+            <div class="profile-header-top">
+                <h2>Your Profile</h2>
+                <button type="button" class="edit-profile-btn auth-only" data-view="edit-profile">Edit Profile</button>
+            </div>
             <div class="profile-header">
-                <div class="avatar">DS</div>
+                <div class="avatar" id="profileAvatar">DS</div>
                 <div class="profile-info">
                     <h3 id="profileUsername">@DesignStudent</h3>
                     <p id="profileBio">Art student & creative enthusiast. Sharing human-made art.</p>
@@ -123,6 +126,26 @@
             </div>
             <h3>Your Artwork</h3>
             <div id="profileGrid" class="grid"></div>
+        </section>
+
+        <!-- Edit Profile page -->
+        <section id="view-edit-profile" class="view">
+            <h2>Edit Your Profile</h2>
+            <form id="editProfileForm">
+                <label>
+                    Profile Picture
+                    <input type="file" id="editProfilePicFile" accept="image/*">
+                    <img id="editProfilePicPreview" style="max-width: 150px; margin-top: 10px; display: none; border-radius: 50%;">
+                </label>
+                <label>
+                    Bio
+                    <textarea id="editProfileBio" rows="4" placeholder="Tell the world about yourself..."></textarea>
+                </label>
+                <div class="form-actions">
+                    <button type="submit">Save Changes</button>
+                    <button type="button" class="secondary-btn" data-view="profile">Cancel</button>
+                </div>
+            </form>
         </section>
 
         <button type="button" id="floatingUploadBtn" data-view="upload">＋</button>

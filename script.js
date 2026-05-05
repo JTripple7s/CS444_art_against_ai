@@ -1,7 +1,7 @@
 // API Configuration
-const API_URL = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-    ? "http://localhost:5000/api"
-    : "/api";
+const IS_LOCAL = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+const BASE_URL = IS_LOCAL ? "http://localhost:5000" : "";
+const API_URL = `${BASE_URL}/api`;
 
 // Auth State
 let currentUser = null;
@@ -169,7 +169,7 @@ async function renderFeed(reset = false) {
             card.className = "card";
             card.dataset.id = art.id;
 
-            const fullImageUrl = art.image_url.startsWith("/") ? `${art.image_url}` : art.image_url;
+            const fullImageUrl = art.image_url.startsWith("/") ? `${BASE_URL}${art.image_url}` : art.image_url;
 
             card.innerHTML = `
                 <img src="${fullImageUrl}" alt="${art.title}">
@@ -223,7 +223,7 @@ async function renderProfile() {
             const card = document.createElement("div");
             card.className = "card card-profile";
             card.dataset.id = art.id;
-            const fullImageUrl = art.image_url.startsWith("/") ? `${art.image_url}` : art.image_url;
+            const fullImageUrl = art.image_url.startsWith("/") ? `${BASE_URL}${art.image_url}` : art.image_url;
             card.innerHTML = `
                 <img src="${fullImageUrl}" alt="${art.title}">
                 <div class="overlay-actions">
@@ -264,8 +264,8 @@ async function openDetail(id) {
         localStorage.setItem(LS_KEY_DETAIL_ID, id);
 
         const container = document.getElementById("detailContainer");
-        const fullImageUrl = art.image_url.startsWith("/") ? `${art.image_url}` : art.image_url;
-        const artistPic = art.artist_pic ? `${art.artist_pic}` : null;
+        const fullImageUrl = art.image_url.startsWith("/") ? `${BASE_URL}${art.image_url}` : art.image_url;
+        const artistPic = art.artist_pic ? `${BASE_URL}${art.artist_pic}` : null;
 
         container.innerHTML = `
             <div class="detail-image">
@@ -390,7 +390,7 @@ async function updateProfileStatsUI() {
 
         if (avatarEl) {
             if (currentUser.profile_pic_url) {
-                avatarEl.innerHTML = `<img src="${currentUser.profile_pic_url}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`;
+                avatarEl.innerHTML = `<img src="${BASE_URL}${currentUser.profile_pic_url}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`;
             } else {
                 avatarEl.textContent = currentUser.username.substring(0, 2).toUpperCase();
             }
@@ -481,7 +481,7 @@ function renderSingleComment(c) {
     if (placeholder) placeholder.remove();
     const div = document.createElement("div");
     div.className = "comment-item";
-    const authorPic = c.author_pic ? `${c.author_pic}` : null;
+    const authorPic = c.author_pic ? `${BASE_URL}${c.author_pic}` : null;
     div.innerHTML = `
         <div class="comment-author-pic">
             ${authorPic ? `<img src="${authorPic}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : c.author.substring(0,2).toUpperCase()}
@@ -608,6 +608,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         // 4. Navigation: View Links
         const viewLink = target.closest("[data-view]");
         if (viewLink) {
+            if (target.closest(".action-upvote") || target.closest(".action-follow")) return;
+            
             e.preventDefault();
             e.stopPropagation();
             const view = viewLink.getAttribute("data-view");

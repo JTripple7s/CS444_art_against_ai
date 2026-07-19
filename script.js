@@ -144,6 +144,16 @@ function showView(viewId) {
     document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
     targetView.classList.add("active");
     
+    // Highlight active navigation tab
+    document.querySelectorAll(".nav-links li").forEach(li => {
+        const link = li.querySelector("a");
+        if (link && link.getAttribute("data-view") === viewId) {
+            li.classList.add("active");
+        } else {
+            li.classList.remove("active");
+        }
+    });
+    
     window.scrollTo(0, 0);
 }
 
@@ -582,6 +592,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             e.stopPropagation();
             const id = upvoteBtn.getAttribute("data-id");
             const isUpvoted = upvoteBtn.classList.contains("upvoted") || upvoteBtn.classList.contains("upvoted-active");
+            
+            // Add pop animation effect
+            upvoteBtn.classList.add("upvoted-pop");
+            setTimeout(() => upvoteBtn.classList.remove("upvoted-pop"), 350);
+
             await upvoteArtwork(id, isUpvoted);
             return;
         }

@@ -90,6 +90,27 @@ async function initDB() {
     )
   `);
 
+  // Auto-seed if database is empty
+  try {
+    const userCount = await db.get("SELECT COUNT(*) as count FROM users");
+    if (!userCount || userCount.count === 0) {
+      console.log("Empty database detected. Auto-seeding mock data...");
+      const fs = require("fs");
+      const seedScriptPath = path.join(__dirname, "../database/seed.js");
+      if (fs.existsSync(seedScriptPath)) {
+        const { execSync } = require("child_process");
+        try {
+          execSync(`node "${seedScriptPath}"`, { stdio: "inherit" });
+          console.log("Auto-seeding completed successfully.");
+        } catch (seedErr) {
+          console.error("Auto-seeding failed during execution:", seedErr.message);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Failed to check/trigger auto-seed:", err.message);
+  }
+
   return db;
 }
 

@@ -1,50 +1,67 @@
-# Project Setup Instructions: CS444_art_against_ai
+# Project Setup Instructions: Art Against AI (Pinterest Clone)
 
-Follow these steps to get the project running on a new device after pulling from GitHub.
+Follow these steps to get the project running locally on your device.
 
 ## 1. Install Dependencies
-The project has separate dependencies for the root and the server. Install both:
+The project has dependencies in both the root folder and the server folder. You can install all of them at once from the root directory:
 
-### Root Dependencies:
-Open your terminal in the 'CS444_art_against_ai' folder and run:
-npm install
-
-### Server Dependencies:
-Navigate to the 'server' folder and run:
-cd server
-npm install
+Open your terminal in the root `CS444_art_against_ai` folder and run:
+```bash
+npm run install-all
+```
+*Note: This script will run `npm install` in the root, install server dependencies, and rebuild `sqlite3` to ensure compatibility with your local Node.js environment.*
 
 ---
 
 ## 2. Configure Environment Variables
-The '.env' file is ignored by Git for security. You must manually recreate it:
-1. In the 'server/' directory, create a new file named '.env'.
-2. Add the following configuration (adjust values as needed):
-
-PORT=5000
-JWT_SECRET=your_random_secret_string_here
-CLIENT_URL=http://localhost:3000
-
----
-
-## 3. Database Initialization
-The server is configured to automatically create the 'AAA.db' file in 'server/src/database/' if it does not exist. 
-
-NOTE: Because the database file is not tracked by Git, your local user accounts will NOT transfer to the new device. You will need to sign up again on the new machine to create a new admin/user account.
+The `.env` file is ignored by Git for security. You must manually recreate it:
+1. In the `server/` directory, create a new file named `.env`.
+2. Add the following configuration:
+   ```env
+   PORT=5000
+   JWT_SECRET=your_random_secret_string_here
+   CLIENT_URL=http://localhost:5000
+   ```
 
 ---
 
-## 4. Frontend Data (LocalStorage)
-Artwork data (titles, images, votes) is stored in the browser's 'localStorage'. 
-- This data is specific to the browser and device you are using.
-- On a new device, the feed will reset to the default "seed" data until you upload new artwork.
+## 3. Database & Seeding
+The backend uses a SQLite database (`AAA.db` in `server/src/database/`). 
+
+- **Automatic Initialization**: When you run the server for the first time, it will automatically create the database file and table schemas if they do not exist.
+- **Automatic Seeding**: If the database is detected as empty on startup, the server will automatically run the seed script to populate it with 6 high-quality artist accounts, 10 premium custom artworks, follows, comments, and upvotes so the website is immediately full of beautiful mock data.
+- **Manual Database Reset**: If you ever want to reset the database back to the clean seed state, run:
+  ```bash
+  npm run db:seed
+  ```
+
+---
+
+## 4. Session & View Storage (LocalStorage)
+The browser's `localStorage` is only used to persist:
+- The session authentication token (`artAgainstAI_token`) so you remain logged in.
+- The active view and current detailed artwork ID to preserve state on page refreshes.
+
+All artwork, comment, vote, and user data is stored safely on the server database.
 
 ---
 
 ## 5. Running the Application
-To start the backend server:
-1. Navigate to the 'server' directory.
+To start the application:
+1. Open your terminal in the root folder.
 2. Run the start command:
-npm run dev
+   ```bash
+   npm start
+   ```
+3. Open your browser and navigate to:
+   ```url
+   http://localhost:5000
+   ```
 
-The server will be active at http://localhost:5000. You can then open 'index.html' in your browser to use the application.
+---
+
+## 6. Seed Accounts (For Showcasing)
+You can log in and test the user features using any of these seeded artist accounts:
+- **Canvas_Queen**: email `queen@canvas.local`, password `password123`
+- **Aura_Digital**: email `aura@digital.local`, password `password123`
+- **Clay_Craftsman**: email `clay@craftsman.local`, password `password123`

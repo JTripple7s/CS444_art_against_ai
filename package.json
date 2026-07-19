@@ -4,7 +4,8 @@
   "scripts": {
     "install-all": "npm install && cd server && npm install --build-from-source sqlite3",
     "start": "node server/src/server.js",
-    "view-db": "node server/view-db.js"
+    "view-db": "node server/view-db.js",
+    "db:seed": "node server/src/database/seed.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

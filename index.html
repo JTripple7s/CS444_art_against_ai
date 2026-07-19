@@ -8,7 +8,7 @@
 <body>
     <!-- Navigation bar -->
     <nav class="navbar">
-        <div class="logo">Art Against AI</div>
+        <div class="logo" data-view="home">Art Against AI</div>
         <ul class="nav-links">
             <li><a href="#" data-view="home">Home</a></li>
             <li class="auth-only"><a href="#" data-view="upload">Upload</a></li>
@@ -151,6 +151,13 @@
         <button type="button" id="floatingUploadBtn" data-view="upload">＋</button>
 
     </main>
+
+    <div id="loadingOverlay">
+        <div>
+            <div class="spinner"></div>
+            <p>Loading...</p>
+        </div>
+    </div>
 
     <script src="script.js"></script>
 </body>
